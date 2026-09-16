@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LHSEC Mutual Fund Allocation Email Dispatcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+  <!-- SheetJS for Client-Side Excel Parsing (No Server Required) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <span class="brand-badge">LHSEC</span>
+          <div class="brand-title-wrap">
+            <h1 class="brand-title">ระบบส่งอีเมลแจ้งสถานะจัดสรรหน่วยลงทุน</h1>
+            <p class="brand-subtitle">Mutual Fund Allocation Email Dispatcher &bull; ฝ่ายปฏิบัติการหลักทรัพย์</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="font-size-adjuster">
+          <span class="font-adj-label">ขนาดอักษร:</span>
+          <button class="btn-font-adj" id="btnFontDec" title="ลดขนาดตัวอักษร">A-</button>
+          <button class="btn-font-adj" id="btnFontReset" title="ขนาดปกติ">A</button>
+          <button class="btn-font-adj" id="btnFontInc" title="เพิ่มขนาดตัวอักษร">A+</button>
+          <button class="btn-font-adj" id="btnFontXl" title="ขนาดใหญ่พิเศษ">A++</button>
+        </div>
+        <div class="system-status-chip standalone-chip" id="systemStatusChip">
+          <span class="status-dot green pulse"></span>
+          <span id="systemStatusText">🟢 Pure Web Standalone (พร้อมใช้งาน 100%)</span>
+        </div>
+        <div class="current-date-badge">
+          <span id="currentDateDisplay">--/--/----</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="app-nav">
+      <button class="nav-tab active" data-tab="tab-import">
+        <span class="tab-icon">📥</span>
+        <span>1. นำเข้าไฟล์คำสั่ง (Import Order)</span>
+        <span class="tab-badge" id="navOrderCountBadge">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-dispatch">
+        <span class="tab-icon">✉️</span>
+        <span>2. จัดกลุ่มและนำส่งอีเมล (Dispatch & Review)</span>
+        <span class="tab-badge warning" id="navIcCountBadge">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-contacts">
+        <span class="tab-icon">👥</span>
+        <span>3. สมุดรายชื่อเจ้าหน้าที่การตลาด (Marketing Directory)</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-logs">
+        <span class="tab-icon">📜</span>
+        <span>4. ประวัติการนำส่ง (Audit Logs)</span>
+        <span class="tab-badge info" id="navLogCountBadge">0</span>
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+
+      <!-- TAB 1: IMPORT & DATA -->
+      <section id="tab-import" class="tab-pane active">
+        <!-- Import Control Card -->
+        <div class="glass-card import-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">นำเข้าไฟล์รายการจัดสรร / คำสั่งซื้อขายกองทุน (Excel XLS/XLSX, CSV, TXT)</h2>
+              <p class="card-desc">รองรับไฟล์ Reconcile Daily (`fcx_reconciledaily_*.xls`) และไฟล์ส่งออก
+                `*_ALLOTTEDTRANSACTIONS.txt` ที่มีสถานะ <strong>WAITING / ALLOTTED</strong></p>
+            </div>
+            <div class="header-actions" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <div class="encoding-selector-wrap"
+                style="display:flex; align-items:center; gap:6px; background:#F1F5FA; padding:4px 10px; border-radius:6px; border:1px solid #CBD5E1;">
+                <label for="selectFileEncoding" style="font-size:13.5px; font-weight:600; color:var(--primary-navy);">🌐
+                  ภาษา/Encoding:</label>
+                <select id="selectFileEncoding" class="select-filter"
+                  style="font-size:13.5px; padding:4px 8px; height:auto;">
+                  <option value="auto" selected>🔄 อัตโนมัติ (Auto-Detect Thai TIS-620 / CP874 / UTF-8)</option>
+                  <option value="windows-874">🇹🇭 Windows-874 / TIS-620 (ภาษาไทย)</option>
+                  <option value="utf-8">🌐 UTF-8 (สากล)</option>
+                  <option value="windows-1252">🇺🇸 Windows-1252 (Latin-1)</option>
+                </select>
+              </div>
+              <button class="btn btn-outline" id="btnLoadSample">
+                <span>📁 ไฟล์ Excel ตัวอย่าง</span>
+              </button>
+              <button class="btn btn-primary" id="btnLoadAllottedSample"
+                style="background:#D97706; border-color:#B45309;">
+                <span>⏳ โหลดไฟล์ AllottedTransactions (WAITING)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dropzone -->
+          <div class="dropzone" id="fileDropzone">
+            <input type="file" id="excelFileInput" accept=".xls,.xlsx,.csv,.txt" style="display:none;">
+            <div class="dropzone-inner">
+              <div class="dropzone-icon">📊</div>
+              <h3 class="dropzone-title">ลากไฟล์ Excel (.xls, .xlsx) หรือไฟล์ AllottedTransactions (.txt, .csv)
+                มาวางที่นี่</h3>
+              <p class="dropzone-subtitle">รองรับไฟล์ Reconcile และไฟล์ส่งออก Pipe-delimited (`|`) แสดงสถานะ WAITING /
+                ALLOTTED ทันที</p>
+              <button type="button" class="btn btn-primary" id="btnBrowseFile">
+                <span>📂 เลือกไฟล์จากเครื่อง</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Current Loaded File Banner -->
+          <div class="loaded-file-banner" id="loadedFileBanner" style="display:none;">
+            <div class="file-info-col">
+              <span class="file-icon">📄</span>
+              <div>
+                <strong class="file-name" id="displayFileName">fcx_reconciledaily.xls</strong>
+                <span class="file-meta" id="displayFileMeta">13 รายการ &bull; 5 เจ้าหน้าที่การตลาด</span>
+              </div>
+            </div>
+            <div class="file-actions-col">
+              <button class="btn btn-sm btn-outline-danger" id="btnClearData">ล้างข้อมูล</button>
+              <button class="btn btn-sm btn-success" id="btnProceedToDispatch">ไปขั้นตอนส่งอีเมล &rarr;</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI Metrics Grid -->
+        <div class="kpi-grid" id="kpiGrid" style="display:none;">
+          <div class="kpi-card">
+            <div class="kpi-icon blue">📋</div>
+            <div class="kpi-content">
+              <span class="kpi-label">จำนวนคำสั่งทั้งหมด</span>
+              <h3 class="kpi-value" id="kpiTotalOrders">0</h3>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon green">💰</div>
+            <div class="kpi-content">
+              <span class="kpi-label">มูลค่ารวม (บาท)</span>
+              <h3 class="kpi-value" id="kpiTotalAmount">0.00</h3>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon orange">⏳</div>
+            <div class="kpi-content">
+              <span class="kpi-label">สถานะ WAITING (รอ NAV)</span>
+              <h3 class="kpi-value" id="kpiWaitingOrders" style="color:#D97706;">0</h3>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple">👤</div>
+            <div class="kpi-content">
+              <span class="kpi-label">เจ้าหน้าที่การตลาด (IC)</span>
+              <h3 class="kpi-value" id="kpiTotalIcs">0</h3>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data Grid Table Card -->
+        <div class="glass-card" id="dataTableCard" style="display:none;">
+          <div class="card-header table-header-flex">
+            <div>
+              <h3 class="card-title">รายการคำสั่งที่นำเข้า (Data Preview)</h3>
+              <span class="card-badge" id="tableFilterCountBadge">แสดง 0 รายการ</span>
+            </div>
+            <div class="table-filters">
+              <input type="text" class="input-search" id="inputTableSearch"
+                placeholder="🔍 ค้นหาชื่อลูกค้า, บัญชี, กองทุน, IC...">
+              <select class="select-filter" id="selectStatusFilter">
+                <option value="ALL">ทุกสถานะ (All Status)</option>
+                <option value="WAITING">เฉพาะ WAITING (รอ NAV)</option>
+                <option value="ALLOTTED">เฉพาะ ALLOTTED / Done</option>
+              </select>
+              <select class="select-filter" id="selectTypeFilter">
+                <option value="ALL">ทุกประเภท (BU/SE/SO/SI)</option>
+                <option value="BU">ซื้อ (BU / SUB)</option>
+                <option value="SE">ขาย (SE / RED)</option>
+                <option value="SO">สับเปลี่ยนออก (SO / SWO)</option>
+                <option value="SI">สับเปลี่ยนเข้า (SI / SWI)</option>
+              </select>
+              <select class="select-filter" id="selectIcFilter">
+                <option value="ALL">ทุกเจ้าหน้าที่การตลาด (All IC)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="ordersTable">
+              <thead>
+                <tr>
+                  <th>ลำดับ</th>
+                  <th>วันที่-เวลาทำรายการ</th>
+                  <th>เลขที่บัญชี</th>
+                  <th>ชื่อลูกค้า</th>
+                  <th>บลจ.</th>
+                  <th>ประเภท</th>
+                  <th>กองทุน</th>
+                  <th>IC License</th>
+                  <th class="text-right">ราคา NAV</th>
+                  <th class="text-right">จำนวนเงิน (บาท)</th>
+                  <th class="text-right">จำนวนหน่วย</th>
+                  <th>วันจ่ายเงิน (SE)</th>
+                  <th>สถานะ</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- TAB 2: DISPATCH & REVIEW -->
+      <section id="tab-dispatch" class="tab-pane">
+        <!-- Configuration Bar -->
+        <div class="glass-card config-card">
+          <div class="config-grid">
+
+            <!-- Template Mode Selector -->
+            <div class="form-group full-width">
+              <label class="form-label">
+                <strong>📌 รูปแบบเทมเพลตอีเมล (Email Template Mode):</strong>
+              </label>
+              <div class="radio-toggle-group template-modes-group">
+                <label class="radio-toggle-btn active" id="lblModeOpsAllot">
+                  <input type="radio" name="emailMode" value="ops_allot" checked>
+                  <span>🌟 1. แจ้งการจัดสรรหน่วยลงทุน + กำหนด Cut-off (OPS-ALLOT-001)</span>
+                </label>
+                <label class="radio-toggle-btn" id="lblModeAllocated">
+                  <input type="radio" name="emailMode" value="allocated">
+                  <span>📊 2. แจ้งสถานะจัดสรรแล้ว (แยก 4 หมวดตาราง)</span>
+                </label>
+                <label class="radio-toggle-btn" id="lblModeWaiting">
+                  <input type="radio" name="emailMode" value="waiting">
+                  <span>⏳ 3. แจ้งสถานะรอยืนยัน NAV (WAITING)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="inputRefDate">
+                <strong>📅 วันที่ทำรายการ ({{TRANS_DATE}}):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputRefDate" value="14/08/2026" placeholder="DD/MM/YYYY">
+            </div>
+
+            <div class="form-group" id="groupCutoffTime">
+              <label class="form-label" for="inputCutoffTime">
+                <strong>⏰ เวลา Cut-off ({{CUTOFF_TIME}}):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputCutoffTime" value="14:00" placeholder="14:00">
+            </div>
+
+            <div class="form-group" id="groupFolderPath">
+              <label class="form-label" for="inputFolderPath">
+                <strong>📁 ตำแหน่งจัดเก็บเอกสาร ({{FOLDER_PATH}}):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputFolderPath" value="LoopOut" placeholder="LoopOut">
+            </div>
+
+            <div class="form-group" id="groupReportName">
+              <label class="form-label" for="inputReportName">
+                <strong>📄 ชื่อรายงานแนบ ({{REPORT_NAME}}):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputReportName"
+                value="Reconcile Daily Confirmed Transaction (V1.0.0)" placeholder="Reconcile Daily...">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="inputSenderName">
+                <strong>👤 ชื่อผู้ส่ง ({{SENDER_NAME}}):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputSenderName" value="Wattana Thounmaliwan"
+                placeholder="Wattana Thounmaliwan">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="inputSenderTel">
+                <strong>📞 เบอร์ติดต่อผู้ส่ง ({{SENDER_TEL}}):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputSenderTel" value="02 055 5107" placeholder="02 055 5107">
+            </div>
+
+            <div class="form-group full-width">
+              <label class="form-label" for="inputSubjectTemplate">
+                <strong>📝 หัวข้ออีเมล (Subject Line Template):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputSubjectTemplate"
+                value="[ดำเนินการ] แจ้งการจัดสรรหน่วยลงทุน ประจำวันที่ {date} | Cut-off {cutoff} น.">
+            </div>
+
+            <div class="form-group full-width">
+              <label class="form-label" for="inputDefaultCC">
+                <strong>👥 ผู้รับสำเนา (Default CC):</strong>
+              </label>
+              <input type="text" class="form-control" id="inputDefaultCC"
+                value="karnrawee.s@lhsec.co.th; groupoperation@lhsec.co.th">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Marketing Officers Group List Card -->
+        <div class="glass-card">
+          <div class="card-header flex-between">
+            <div>
+              <h2 class="card-title">สรุปรายการแยกตามเจ้าหน้าที่การตลาด (Grouped by Marketing / IC)</h2>
+              <p class="card-desc">ตรวจสอบรายชื่อและยอดคำสั่ง จากนั้นเลือกดูตัวอย่าง คัดลอก Rich HTML หรือสร้างไฟล์ .EML
+                สำหรับเปิดใน Outlook</p>
+            </div>
+
+            <div class="batch-actions-wrap">
+              <button class="btn btn-outline" id="btnSelectAllIcs">เลือกทั้งหมด</button>
+              <button class="btn btn-outline" id="btnDeselectAllIcs">ยกเลิกเลือก</button>
+              <button class="btn btn-primary" id="btnBatchDownloadEml">
+                <span>📥 ดาวน์โหลดไฟล์ .EML ทั้งหมดที่เลือก</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Marketing Officer Cards List -->
+          <div class="ic-cards-container" id="icCardsContainer">
+            <div class="empty-placeholder">
+              <span class="empty-icon">📥</span>
+              <p>ยังไม่มีข้อมูล กรุณานำเข้าไฟล์ Excel ในแท็บ "นำเข้าไฟล์คำสั่ง"</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- TAB 3: MARKETING DIRECTORY -->
+      <section id="tab-contacts" class="tab-pane">
+        <div class="glass-card">
+          <div class="card-header flex-between">
+            <div>
+              <h2 class="card-title">สมุดรายชื่อเจ้าหน้าที่การตลาด (Marketing Directory & IC Mapping)</h2>
+              <p class="card-desc">จับคู่รหัส IC License กับชื่อ, อีเมลผู้รับ และอีเมลสำเนา ข้อมูลบันทึกไว้ใน Browser
+                (LocalStorage) พร้อมใช้งานตลอดเวลา</p>
+            </div>
+            <div class="header-actions">
+              <button class="btn btn-outline" id="btnExportContacts">
+                <span>📤 สำรองข้อมูล (Export JSON)</span>
+              </button>
+              <button class="btn btn-outline" id="btnImportContacts">
+                <span>📥 นำเข้าสมุดรายชื่อ (Import JSON)</span>
+              </button>
+              <input type="file" id="importContactsInput" accept=".json" style="display:none;">
+              <button class="btn btn-primary" id="btnAddContact">
+                <span>➕ เพิ่มเจ้าหน้าที่การตลาด</span>
+              </button>
+              <button class="btn btn-outline-danger" id="btnResetContacts">
+                <span>🔄 คืนค่าเริ่มต้น</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="contactsTable">
+              <thead>
+                <tr>
+                  <th style="width: 120px;">IC License</th>
+                  <th>ชื่อ-นามสกุล (อังกฤษ)</th>
+                  <th>ชื่อ-นามสกุล (ไทย)</th>
+                  <th>อีเมล (To)</th>
+                  <th>อีเมลสำเนา (CC)</th>
+                  <th>ฝ่ายงาน</th>
+                  <th style="width: 140px;" class="text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="contactsTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- TAB 4: AUDIT LOGS -->
+      <section id="tab-logs" class="tab-pane">
+        <div class="glass-card">
+          <div class="card-header flex-between">
+            <div>
+              <h2 class="card-title">ประวัติการสร้างและนำส่งอีเมล (Dispatch Audit Logs)</h2>
+              <p class="card-desc">บันทึกประวัติการสร้างแบบร่าง การคัดลอก และการดาวน์โหลดไฟล์ .EML ย้อนหลัง</p>
+            </div>
+            <div class="header-actions">
+              <button class="btn btn-outline" id="btnRefreshLogs">
+                <span>🔄 รีเฟรชประวัติ</span>
+              </button>
+              <button class="btn btn-outline-danger" id="btnClearLogs">
+                <span>🗑️ ล้างประวัติ</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="logsTable">
+              <thead>
+                <tr>
+                  <th>วันที่-เวลา</th>
+                  <th>IC License</th>
+                  <th>ผู้รับ (To)</th>
+                  <th>หัวข้ออีเมล</th>
+                  <th>การดำเนินการ</th>
+                  <th>รายละเอียดผลลัพธ์</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div>LHSEC Mutual Fund Allocation Email Dispatcher &bull; Version 2.0 (Pure Web Standalone)</div>
+      <div>ฝ่ายปฏิบัติการหลักทรัพย์ บริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)</div>
+    </footer>
+  </div>
+
+  <!-- EMAIL PREVIEW MODAL -->
+  <div class="modal-backdrop" id="emailPreviewModal" style="display:none;">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-badge">Preview</span>
+          <h3 class="modal-title" id="modalPreviewTitle">ตัวอย่างอีเมล (Email Live Preview)</h3>
+        </div>
+        <button class="modal-close-btn" id="btnClosePreviewModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Email Metadata Header Preview -->
+        <div class="email-meta-box">
+          <div class="meta-row">
+            <span class="meta-label">ถึง (To):</span>
+            <span class="meta-val" id="prevTo">--</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">สำเนา (CC):</span>
+            <span class="meta-val" id="prevCc">--</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">หัวเรื่อง (Subject):</span>
+            <span class="meta-val strong" id="prevSubject">--</span>
+          </div>
+        </div>
+
+        <!-- Pre-flight Checklist Box (From Markdown.md) -->
+        <div class="checklist-card" id="modalChecklistCard">
+          <div class="checklist-header">
+            <span class="checklist-icon">📋</span>
+            <strong>Checklist ก่อนส่ง (Pre-flight Verification)</strong>
+          </div>
+          <div class="checklist-grid">
+            <label class="check-item"><input type="checkbox" id="chk1" checked> <span>ตรวจสอบ <code
+                  id="lblChkDate">{{TRANS_DATE}}</code> ตรงกับ As of date ในรายงาน</span></label>
+            <label class="check-item"><input type="checkbox" id="chk2" checked> <span>แนบไฟล์รายงาน <code
+                  id="lblChkReport">{{REPORT_NAME}}</code> เรียบร้อย</span></label>
+            <label class="check-item"><input type="checkbox" id="chk3" checked> <span>ตรวจสอบตาราง Result / Status
+                ไม่มีรายการค้าง</span></label>
+            <label class="check-item"><input type="checkbox" id="chk4" checked> <span>ระบุ CC: Group Operation
+                และผู้เกี่ยวข้องครบถ้วน</span></label>
+            <label class="check-item"><input type="checkbox" id="chk5" checked> <span>ยืนยันเวลา Cut-off
+                ถูกต้องตามประเภทธุรกรรม</span></label>
+            <label class="check-item"><input type="checkbox" id="chk6" checked> <span>จัดเก็บสำเนาเข้าโฟลเดอร์ <code
+                  id="lblChkFolder">{{FOLDER_PATH}}</code></span></label>
+          </div>
+          <!-- Cut-off Policy Banner (From Markdown.md) -->
+          <div class="cutoff-policy-banner">
+            ⚠️ <strong>Cut-off Policy:</strong> รายการที่ได้รับหลังเวลา Cut-off จะถูกบันทึกเป็นรายการของวันทำการถัดไป
+            (T+1) โดยฝ่ายปฏิบัติการฯ จะไม่รับผิดชอบต่อผลกระทบที่เกิดจากการส่งข้อมูลล่าช้า
+          </div>
+        </div>
+
+        <!-- Rendered Email Body Preview -->
+        <div class="email-body-render-container" id="emailHtmlPreviewContainer">
+          <!-- Injected HTML template -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="btnClosePreviewModalFooter">ปิดหน้าต่าง</button>
+        <button class="btn btn-info" id="btnModalMailto">
+          <span>✉️ เปิด Outlook (mailto:)</span>
+        </button>
+        <button class="btn btn-primary" id="btnModalCopyHtml">
+          <span>📋 คัดลอกเนื้อหาอีเมล (Copy HTML)</span>
+        </button>
+        <button class="btn btn-success" id="btnModalDownloadEml">
+          <span>📥 ดาวน์โหลด/เปิดไฟล์ .EML</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTACT EDIT/ADD MODAL -->
+  <div class="modal-backdrop" id="contactEditModal" style="display:none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" id="contactModalTitle">เพิ่ม/แก้ไข เจ้าหน้าที่การตลาด</h3>
+        <button class="modal-close-btn" id="btnCloseContactModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="contactForm">
+          <div class="form-group">
+            <label class="form-label" for="editIcLicense">รหัส IC License (เช่น 028464):</label>
+            <input type="text" class="form-control" id="editIcLicense" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editThaiName">ชื่อ-นามสกุล (ภาษาไทย):</label>
+            <input type="text" class="form-control" id="editThaiName" placeholder="คุณพิชญา ขาวแสง" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editEngName">ชื่อ-นามสกุล (ภาษาอังกฤษ):</label>
+            <input type="text" class="form-control" id="editEngName" placeholder="Pitchaya Khaoseang">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editEmail">อีเมลผู้รับ (To Email):</label>
+            <input type="email" class="form-control" id="editEmail" placeholder="name@lhsec.co.th" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editCc">อีเมลสำเนา (CC):</label>
+            <input type="text" class="form-control" id="editCc"
+              value="karnrawee.s@lhsec.co.th; operationgroup@lhsec.co.th">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editDepartment">ฝ่ายงาน / แผนก:</label>
+            <input type="text" class="form-control" id="editDepartment" value="Wealth Management / Marketing">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="btnCancelContactModal">ยกเลิก</button>
+        <button class="btn btn-primary" id="btnSaveContactModal">บันทึกข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="app.js"></script>
+</body>
+
+</html>

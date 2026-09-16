@@ -1,0 +1,2382 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Confirmation Splitter - แยกไฟล์ PDF ตามเลขที่บัญชี</title>
+    <meta name="description" content="เครื่องมือแยกไฟล์ PDF Confirmation ตามเลขที่บัญชี รวมบัญชีเดียวกันเป็นไฟล์เดียว">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- PDF.js for text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- pdf-lib for splitting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <!-- JSZip for batch download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1e2642;
+            --border-color: rgba(99, 102, 241, 0.2);
+            --border-hover: rgba(99, 102, 241, 0.5);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-primary: #6366f1;
+            --accent-secondary: #8b5cf6;
+            --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+            --success: #10b981;
+            --success-bg: rgba(16, 185, 129, 0.1);
+            --warning: #f59e0b;
+            --warning-bg: rgba(245, 158, 11, 0.1);
+            --danger: #ef4444;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.15);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Prompt', 'Sarabun', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(167, 139, 250, 0.04) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        .app-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 0;
+        }
+
+        .app-header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+        }
+
+        .app-header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: 60px 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: rgba(26, 32, 53, 0.5);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.dragover {
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .upload-zone:hover::before,
+        .upload-zone.dragover::before {
+            opacity: 0.03;
+        }
+
+        .upload-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .upload-icon svg {
+            width: 36px;
+            height: 36px;
+            color: var(--accent-primary);
+        }
+
+        .upload-zone h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .upload-zone p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Progress Section */
+        .progress-section {
+            display: none;
+            margin: 30px 0;
+        }
+
+        .progress-bar-container {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .progress-label {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .progress-percent {
+            color: var(--accent-primary);
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .progress-track {
+            height: 8px;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-status {
+            margin-top: 10px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        /* File Info */
+        .file-info {
+            display: none;
+            margin: 24px 0;
+            padding: 20px 24px;
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        .file-info.visible {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            animation: slideDown 0.4s ease;
+        }
+
+        .file-info-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .file-info-icon svg {
+            width: 24px;
+            height: 24px;
+            color: #ef4444;
+        }
+
+        .file-info-details {
+            flex: 1;
+        }
+
+        .file-info-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .file-info-meta {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: white;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+        }
+
+        .btn-success:hover {
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 0.8rem;
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Section titles */
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Pages Grid */
+        .pages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .page-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            transition: var(--transition);
+            animation: fadeInUp 0.5s ease;
+        }
+
+        .page-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-glow);
+            transform: translateY(-2px);
+        }
+
+        .page-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: rgba(99, 102, 241, 0.05);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .page-number {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: white;
+        }
+
+        .page-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .page-card-body {
+            padding: 20px;
+        }
+
+        .text-preview {
+            background: var(--bg-primary);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-size: 0.78rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .text-preview::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .text-preview::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .text-preview::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 2px;
+        }
+
+        .code-field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .code-field label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .code-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .code-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .code-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .code-input.detected {
+            border-color: var(--success);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+        }
+
+        .detected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .detected-badge svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .filename-preview {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(99, 102, 241, 0.05);
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .filename-preview span {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .filename-preview .filename {
+            color: var(--accent-primary);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .page-canvas-container {
+            position: relative;
+            width: 100%;
+            margin-bottom: 12px;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            background: white;
+        }
+
+        .page-canvas-container canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Grouped Summary Section */
+        .group-summary-section {
+            display: none;
+            margin: 30px 0;
+        }
+
+        .group-summary-section.visible {
+            display: block;
+            animation: slideDown 0.4s ease;
+        }
+
+        .group-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            padding: 20px 24px;
+            margin-bottom: 12px;
+            transition: var(--transition);
+            animation: fadeInUp 0.4s ease;
+        }
+
+        .group-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .group-account {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .group-account-badge {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .group-account-info h3 {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .group-account-info p {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+
+        .group-pages {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .group-page-tag {
+            padding: 4px 10px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--accent-primary);
+        }
+
+        .group-filename {
+            margin-top: 10px;
+            padding: 8px 14px;
+            background: var(--bg-primary);
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .group-filename span {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        .group-filename .fname {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        /* Download Section */
+        .download-section {
+            display: none;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .download-section.visible {
+            display: block;
+            animation: slideDown 0.4s ease;
+        }
+
+        .download-actions {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* Status */
+        .status-message {
+            display: none;
+            padding: 16px 24px;
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            font-size: 0.9rem;
+            font-weight: 500;
+            animation: slideDown 0.3s ease;
+        }
+
+        .status-message.visible {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-message.success {
+            background: var(--success-bg);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-message.warning {
+            background: var(--warning-bg);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .status-message.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Pattern Config */
+        .pattern-config {
+            display: none;
+            margin: 16px 0;
+            padding: 16px 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        .pattern-config.visible {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .pattern-config h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .pattern-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pattern-row input {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Inter', monospace;
+            font-size: 0.85rem;
+        }
+
+        .pattern-row input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        /* Animations */
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 500;
+            animation: slideInRight 0.3s ease;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .toast.success {
+            background: #059669;
+            color: white;
+        }
+
+        .toast.error {
+            background: #dc2626;
+            color: white;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .app-header h1 {
+                font-size: 1.8rem;
+            }
+
+            .pages-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .upload-zone {
+                padding: 40px 20px;
+            }
+        }
+
+        /* Code input section */
+        .code-input-section {
+            display: none;
+            margin: 24px 0;
+        }
+
+        .code-input-section.visible {
+            display: block;
+            animation: slideDown 0.4s ease;
+        }
+
+        .code-input-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        /* Email Mapping Section */
+        .email-mapping-section {
+            display: none;
+            margin: 30px 0;
+        }
+
+        .email-mapping-section.visible {
+            display: block;
+            animation: slideDown 0.4s ease;
+        }
+
+        .email-mapping-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .email-mapping-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            padding: 16px 20px;
+            margin-bottom: 10px;
+            transition: var(--transition);
+            animation: fadeInUp 0.3s ease;
+        }
+
+        .email-mapping-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .email-mapping-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .email-mapping-row .acct-label {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--accent-primary);
+            min-width: 140px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .email-mapping-row .acct-label .acct-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .email-input {
+            flex: 1;
+            min-width: 250px;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+
+        .email-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .email-input.valid {
+            border-color: var(--success);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+        }
+
+        .email-input.invalid {
+            border-color: var(--danger);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+        }
+
+        .email-subject-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            transition: var(--transition);
+            margin-bottom: 10px;
+        }
+
+        .email-subject-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .email-stats {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .email-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .email-stat.configured {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .email-stat.missing {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-email {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+        }
+
+        .btn-email:hover {
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-email-sm {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            font-size: 0.78rem;
+            padding: 5px 12px;
+        }
+
+        .btn-email-sm:hover {
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .email-send-progress {
+            display: none;
+            margin-top: 16px;
+            padding: 16px 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .email-send-progress.visible {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .email-log {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+            font-size: 0.82rem;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+
+        .email-log-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+        }
+
+        .email-log-item.sent {
+            color: var(--success);
+        }
+
+        .email-log-item.skipped {
+            color: var(--warning);
+        }
+
+        .email-log-item.error {
+            color: var(--danger);
+        }
+    </style>
+    <!-- SheetJS for Excel generation and parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1><i class="fa-solid fa-file-shield" style="color:#6366f1; margin-right:10px;"></i>PDF Confirmation Splitter</h1>
+            <p>แยกไฟล์ PDF Confirmation ตามเลขที่บัญชี — รวมบัญชีเดียวกันเป็นไฟล์เดียว</p>
+        </header>
+
+        <!-- Upload Zone -->
+        <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+            </div>
+            <h3>ลากไฟล์ PDF มาวางที่นี่</h3>
+            <p>หรือคลิกเพื่อเลือกไฟล์ • รองรับไฟล์ .pdf</p>
+            <input type="file" id="fileInput" accept=".pdf">
+        </div>
+
+        <!-- File Info -->
+        <div class="file-info" id="fileInfo">
+            <div class="file-info-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <div class="file-info-details">
+                <div class="file-info-name" id="fileName">—</div>
+                <div class="file-info-meta" id="fileMeta">—</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-sm btn-secondary" onclick="resetApp()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                        stroke-width="2" width="16" height="16">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    เริ่มใหม่
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-section" id="progressSection">
+            <div class="progress-bar-container">
+                <div class="progress-header">
+                    <span class="progress-label">⚙️ กำลังประมวลผล PDF...</span>
+                    <span class="progress-percent" id="progressPercent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-status" id="progressStatus">กำลังอ่านไฟล์...</div>
+            </div>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="statusMessage"></div>
+
+        <!-- Pattern Config -->
+        <div class="pattern-config" id="patternConfig">
+            <h3>🔍 ตั้งค่ารูปแบบการค้นหาเลขที่บัญชี (Regex)</h3>
+            <div class="pattern-row">
+                <label>Pattern:</label>
+                <input type="text" id="codePattern" value=""
+                    placeholder="ใส่ Regex สำหรับดึงเลขที่บัญชี เช่น (\d{10,})">
+                <button class="btn btn-sm btn-primary" onclick="reDetectCodes()">ค้นหาใหม่</button>
+            </div>
+            <p style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);">
+                ✨ ระบบจะพยายามตรวจจับเลขที่บัญชีอัตโนมัติ หรือคุณสามารถระบุ Regex เอง
+            </p>
+        </div>
+
+        <!-- Code Input Section: Per-page account number -->
+        <div class="code-input-section" id="codeInputSection">
+            <div class="code-input-header">
+                <h2 class="section-title">📋 ตรวจสอบ & แก้ไขเลขที่บัญชีแต่ละหน้า</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-sm btn-secondary" onclick="togglePatternConfig()">⚙️ ตั้งค่า Pattern</button>
+                    <button class="btn btn-sm btn-primary" onclick="buildGroups()">🔄 อัปเดตการจัดกลุ่ม</button>
+                </div>
+            </div>
+            <div class="pages-grid" id="pagesGrid"></div>
+        </div>
+
+        <!-- Group Summary Section -->
+        <div class="group-summary-section" id="groupSummarySection">
+            <h2 class="section-title">📦 สรุปการรวมไฟล์ตามเลขที่บัญชี</h2>
+            <div id="groupList"></div>
+        </div>
+
+                <!-- Email Mapping Section -->
+        <div class="email-mapping-section" id="emailMappingSection">
+            <div class="email-mapping-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                <h2 class="section-title" style="font-size:1.15rem; font-weight:700; color:#f1f5f9; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-envelope-open-text"></i> ตั้งค่า Email & เทมเพลตสำหรับแต่ละบัญชี
+                </h2>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-sm btn-success" onclick="document.getElementById('importExcelInput').click()">
+                        <i class="fa-solid fa-file-excel"></i> นำเข้าไฟล์ Excel
+                    </button>
+                    <input type="file" id="importExcelInput" accept=".xlsx, .xls, .csv" style="display:none;" onchange="handleExcelImport(event)">
+                    
+                    <button class="btn btn-sm btn-secondary" onclick="loadEmailMapping()">
+                        <i class="fa-solid fa-folder-open"></i> โหลดข้อมูลที่บันทึกไว้
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="saveEmailMapping()">
+                        <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล
+                    </button>
+                </div>
+            </div>
+
+            <!-- SMTP Server Settings Box -->
+            <div style="background:rgba(99,102,241,0.05); border-radius:12px; border:1px solid rgba(99,102,241,0.2); padding:16px 20px; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <h3 style="font-size:0.95rem; font-weight:700; color:#a78bfa; display:flex; align-items:center; gap:8px; margin:0;">
+                        <i class="fa-solid fa-server"></i> ตั้งค่า SMTP Server (สำหรับการส่งอีเมลอัตโนมัติ AutoMail)
+                    </h3>
+                    <span style="font-size:0.78rem; color:#64748b;">บันทึกการตั้งค่าในเครื่องอัตโนมัติ</span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
+                    <div>
+                        <label style="font-size:0.78rem; color:#94a3b8; display:block; margin-bottom:4px;">SMTP Host:</label>
+                        <input type="text" id="smtpHost" class="email-subject-input" style="margin:0;" placeholder="เช่น mail.lhsec.co.th / smtp.gmail.com" onchange="saveSmtpSettings()">
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem; color:#94a3b8; display:block; margin-bottom:4px;">Port:</label>
+                        <input type="number" id="smtpPort" class="email-subject-input" style="margin:0;" placeholder="465 / 587" value="465" onchange="saveSmtpSettings()">
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem; color:#94a3b8; display:block; margin-bottom:4px;">Security:</label>
+                        <select id="smtpSecure" class="email-subject-input" style="margin:0;" onchange="saveSmtpSettings()">
+                            <option value="true">SSL/TLS (Secure - Port 465)</option>
+                            <option value="false">STARTTLS / Plain (Port 587 / 25)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem; color:#94a3b8; display:block; margin-bottom:4px;">Username / Sender Email:</label>
+                        <input type="email" id="smtpUser" class="email-subject-input" style="margin:0;" placeholder="อีเมลผู้ส่ง เช่น sender@lhsec.co.th" onchange="saveSmtpSettings()">
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem; color:#94a3b8; display:block; margin-bottom:4px;">Password / App Password:</label>
+                        <input type="password" id="smtpPass" class="email-subject-input" style="margin:0;" placeholder="รหัสผ่านอีเมล" onchange="saveSmtpSettings()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Template Configuration Box -->
+            <div style="background:#1a2035; border-radius:12px; border:1px solid rgba(99,102,241,0.2); padding:18px 20px; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <label style="font-size:0.85rem; font-weight:600; color:#f1f5f9;">
+                            <i class="fa-solid fa-wand-magic-sparkles" style="color:#a78bfa;"></i> เลือกเทมเพลตข้อความ (Preset):
+                        </label>
+                        <select id="templatePreset" class="preset-select" style="padding:8px 12px; background:#0a0e1a; border:1px solid rgba(99,102,241,0.2); border-radius:8px; color:#f1f5f9; font-size:0.85rem; cursor:pointer;" onchange="applyTemplatePreset(this.value)">
+                            <option value="bond_aomplus" selected>พันธบัตรรัฐบาล "ออมพลัส" (RBP368A) [ค่าเริ่มต้น]</option>
+                            <option value="mkt_change">เปลี่ยนแปลงเจ้าหน้าที่การตลาด (ฝ่ายทะเบียนหลักทรัพย์)</option>
+                            <option value="fund_confirm">Confirmation รายการซื้อขายกองทุน/หลักทรัพย์</option>
+                            <option value="custom">กำหนดเอง (Custom)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-sm btn-secondary" onclick="resetCurrentTemplate()">
+                        <i class="fa-solid fa-arrow-rotate-left"></i> คืนค่าเทมเพลตเริ่มต้น
+                    </button>
+                </div>
+
+                <!-- Subject -->
+                <div style="margin-bottom:14px;">
+                    <label style="font-size:0.85rem; font-weight:600; color:#94a3b8; display:block; margin-bottom:6px;">
+                        📝 หัวข้อ Email (Subject):
+                    </label>
+                    <input type="text" class="email-subject-input" id="emailSubject"
+                        value="แจ้งยืนยันผลการจัดสรรและคืนเงินส่วนต่างการจองซื้อพันธบัตรรัฐบาล &quot;ออมพลัส&quot; (RBP368A)" placeholder="ใส่หัวข้อ Email...">
+                </div>
+
+                <!-- Dynamic Variables Toolbar -->
+                <div>
+                    <label style="font-size:0.85rem; font-weight:600; color:#94a3b8; display:block; margin-bottom:4px;">
+                        ✉️ เนื้อหา Email (Body Template): <span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(คลิกตัวแปรเพื่อแทรกในข้อความ)</span>
+                    </label>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[Account]')">[Account]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[CustomerName]')">[CustomerName]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[CustomerCode]')">[CustomerCode]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[FileName]')">[FileName]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[PageCount]')">[PageCount]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[PagesIncluded]')">[PagesIncluded]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[OriginalFile]')">[OriginalFile]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[Date]')">[Date]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[BondName]')">[BondName]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[BondCode]')">[BondCode]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[FiscalYear]')">[FiscalYear]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[IssueNo]')">[IssueNo]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[OfferPeriod]')">[OfferPeriod]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[BookingDateTime]')">[BookingDateTime]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[AllocatedUnits]')">[AllocatedUnits]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[AllocatedUnitsText]')">[AllocatedUnitsText]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[AllocatedAmount]')">[AllocatedAmount]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[AllocatedAmountText]')">[AllocatedAmountText]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[RefundAmount]')">[RefundAmount]</span>
+                        <span style="display:inline-block; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:4px; color:#c7d2fe; font-size:0.74rem; font-family:monospace; cursor:pointer;" onclick="insertTag('[RefundAmountText]')">[RefundAmountText]</span>
+                    </div>
+                    <textarea class="email-subject-input" id="emailBody" rows="14" style="font-family: inherit; resize: vertical; min-height: 220px; line-height: 1.6; font-size: 0.88rem;" placeholder="ใส่เนื้อหา Email..."></textarea>
+                </div>
+            </div>
+
+            <!-- Email Mapping List -->
+            <div id="emailMappingList"></div>
+            <div class="email-stats" id="emailStats"></div>
+
+            <!-- Email Sending Progress & Live Log -->
+            <div class="email-send-progress" id="emailSendProgress">
+                <div style="font-weight: 600; margin-bottom: 8px; color: #a78bfa; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-paper-plane"></i> บันทึกการส่งอีเมล (Email Dispatch Log):
+                </div>
+                <div class="email-log" id="emailLog"></div>
+            </div>
+        </div>
+
+        <!-- Download & Dispatch Section -->
+        <div class="download-section" id="downloadSection">
+            <div class="download-actions">
+                <button class="btn btn-success" onclick="downloadAllAsZip()" id="btnDownloadZip">
+                    <i class="fa-solid fa-file-zipper"></i> ดาวน์โหลดทั้งหมด (ZIP)
+                </button>
+                <button class="btn btn-primary" onclick="downloadAllSeparately()" id="btnDownloadSep">
+                    <i class="fa-solid fa-file-arrow-down"></i> ดาวน์โหลดทีละไฟล์
+                </button>
+                <button class="btn btn-email" onclick="sendAllEmails()" id="btnSendEmail">
+                    <i class="fa-solid fa-paper-plane"></i> ส่ง Email อัตโนมัติ (AutoMail Server)
+                </button>
+            </div>
+        </div>
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <script>
+        // Set pdf.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // App State
+        let pdfBytes = null;
+        let pdfDoc = null;
+        let pageTexts = [];
+        let pageCount = 0;
+        let detectedAccounts = []; // per-page detected account numbers
+        let accountGroups = {};    // { accountNo: [pageIndex, ...] }
+        let originalFileName = '';
+        let customerData = {};     // { accountNo: { CustomerName, ...extraFields } }
+
+        // Storage Keys
+        const EMAIL_STORAGE_KEY = 'pdf_splitter_email_mapping';
+        const EMAIL_SUBJECT_KEY = 'pdf_splitter_email_subject';
+        const EMAIL_BODY_KEY = 'pdf_splitter_email_body';
+        const EMAIL_PRESET_KEY = 'pdf_splitter_email_preset';
+        const EMAIL_SMTP_KEY = 'pdf_splitter_smtp_settings';
+        const EMAIL_CUSTOMER_DATA_KEY = 'pdf_splitter_customer_data';
+
+        let emailMapping = {}; // { accountNo: email }
+
+        // ==================== EMAIL PRESET TEMPLATES ====================
+        const EMAIL_PRESETS = {
+            'bond_aomplus': {
+                name: 'พันธบัตรรัฐบาล "ออมพลัส" (RBP368A)',
+                subject: 'แจ้งยืนยันผลการจัดสรรและคืนเงินส่วนต่างการจองซื้อพันธบัตรรัฐบาล "ออมพลัส" (RBP368A)',
+                body: `เรียน คุณ [CustomerName] (ลูกค้า: [Account])\n\nบริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน) ในฐานะผู้จัดจำหน่าย (Selling Agent) พันธบัตรรัฐบาล "[BondName]" ของกระทรวงการคลัง ในปีงบประมาณ พ.ศ. [FiscalYear] ครั้งที่ [IssueNo] ซึ่งเปิดเสนอขายระหว่างวันที่ [OfferPeriod]\n\nบริษัทฯ ขอขอบพระคุณเป็นอย่างยิ่งที่ท่านได้ไว้วางใจเลือกใช้บริการของบริษัทฯ ทั้งนี้ ท่านได้แสดงความจำนงในการจองซื้อและชำระเงินค่าจองซื้อเป็นจำนวนเรียบร้อยแล้ว บริษัทฯ ขอยืนยันรายละเอียดผลการจัดสรรพันธบัตรรัฐบาล รวมถึงการคืนเงินส่วนต่างในส่วนที่ไม่ได้รับการจัดสรร โดยมีรายละเอียดดังต่อไปนี้\n\n==================================================\nรายละเอียดผลการจัดสรรพันธบัตรรัฐบาล\n==================================================\n• ชื่อรุ่นพันธบัตรรัฐบาลที่ได้รับการจัดสรร: [BondCode]\n• เลขที่บัญชี / รหัสลูกค้า: [Account]\n• วัน-เวลาที่ทำรายการจองซื้อผ่านระบบ Settrade: [BookingDateTime]\n• จำนวนพันธบัตรรัฐบาลที่ได้รับการจัดสรร: [AllocatedUnits] หน่วย ([AllocatedUnitsText])\n• มูลค่าพันธบัตรรัฐบาลที่ได้รับการจัดสรร: [AllocatedAmount] บาท ([AllocatedAmountText])\n• จำนวนเงินที่ไม่ได้รับการจัดสรร (ยอดเงินคืน): [RefundAmount] บาท ([RefundAmountText])\n• เอกสารยืนยัน: [FileName]\n==================================================\n\nทั้งนี้ บริษัทฯ ได้ดำเนินการนำส่งคืนเงินส่วนที่ไม่ได้รับการจัดสรรจำนวน [RefundAmount] บาท ([RefundAmountText]) เข้าบัญชีเงินฝากธนาคารเพื่อการหักบัญชีอัตโนมัติ (ATS) ที่ท่านได้ลงทะเบียนไว้กับบริษัทฯ เรียบร้อยแล้ว\n\nหากท่านมีข้อสงสัยหรือต้องการสอบถามข้อมูลเพิ่มเติม สามารถติดต่อสอบถามได้ที่ ฝ่ายผลิตภัณฑ์และพัฒนาธุรกิจ โทร. 02-352-5100 ในวันและเวลาทำการ (วันจันทร์ - วันศุกร์ เวลา 08:30 น. - 17:00 น.)\n\nขอแสดงความนับถือ\nบริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)\n\n************************************************************************************************************************\n"The information transmitted in this E-mail is solely for the recipient(s) name above. It may contain confidential, proprietary or legally privileged material. If you are not the intended recipient(s), please immediately delete it and all copies of it from your system, destroy any hard copies of it and notify the sender review, re-transmission, dissemination or other use of, or taking of any action in reliance upon such information is prohibited. Any views, opinions, comments, statements of information contained in this E-mail, including any attachments (if any) are those of the author, their accuracy, completeness or correctness are not guaranteed. LH SECURITIES COMPANY LIMITED shall not be liable or responsible for any of such contents, including damage or loss resulting from any virus transmitted by this E-mail."\n************************************************************************************************************************`
+            },
+            'mkt_change': {
+                name: 'เปลี่ยนแปลงเจ้าหน้าที่การตลาด (ฝ่ายทะเบียนหลักทรัพย์)',
+                subject: 'แจ้งเปลี่ยนแปลงเจ้าหน้าที่การตลาด - [Account]',
+                body: `เรียน ลูกค้าผู้มีอุปการคุณ\n\nเรื่อง: เปลี่ยนแปลงเจ้าหน้าที่การตลาด\nวันที่: [Date]\n\nรายละเอียดการดำเนินการ:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• เลขที่บัญชี: [Account]\n• ชื่อไฟล์: [FileName]\n• จำนวนหน้า: [PageCount] หน้า\n• หน้าที่รวม: [PagesIncluded]\n• ไฟล์ต้นฉบับ: [OriginalFile]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nกรุณาตรวจสอบไฟล์แนบ ([FileName])\n\nหากมีข้อสงสัยประการใด กรุณาติดต่อกลับ\n02-055-5100 ต่อ 5105, 5012\nขอแสดงความนับถือ\nฝ่ายทะเบียนหลักทรัพย์ บริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)\n\n************************************************************************************************************************\n"The information transmitted in this E-mail is solely for the recipient(s) name above. It may contain confidential, proprietary or legally privileged material. If you are not the intended recipient(s), please immediately delete it and all copies of it from your system, destroy any hard copies of it and notify the sender review, re-transmission, dissemination or other use of, or taking of any action in reliance upon such information is prohibited. Any views, opinions, comments, statements of information contained in this E-mail, including any attachments (if any) are those of the author, their accuracy, completeness or correctness are not guaranteed. LH SECURITIES COMPANY LIMITED shall not be liable or responsible for any of such contents, including damage or loss resulting from any virus transmitted by this E-mail."\n************************************************************************************************************************`
+            },
+            'fund_confirm': {
+                name: 'Confirmation รายการซื้อขายกองทุน/หลักทรัพย์',
+                subject: 'Confirmation รายการซื้อขายกองทุน - [Account] ([Date])',
+                body: `เรียน ลูกค้าผู้มีอุปการคุณ\n\nเรื่อง: เอกสารยืนยันรายการซื้อขายหลักทรัพย์/กองทุน\nวันที่: [Date]\n\nรายละเอียด:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• เลขที่บัญชี: [Account]\n• เอกสารแนบ: [FileName]\n• จำนวนหน้า: [PageCount] หน้า\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nกรุณาตรวจสอบเอกสารยืนยันรายการตามไฟล์แนบ\n\nขอแสดงความนับถือ\nบริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)\n\n************************************************************************************************************************\n"The information transmitted in this E-mail is solely for the recipient(s) name above. It may contain confidential, proprietary or legally privileged material. If you are not the intended recipient(s), please immediately delete it and all copies of it from your system, destroy any hard copies of it and notify the sender review, re-transmission, dissemination or other use of, or taking of any action in reliance upon such information is prohibited. Any views, opinions, comments, statements of information contained in this E-mail, including any attachments (if any) are those of the author, their accuracy, completeness or correctness are not guaranteed. LH SECURITIES COMPANY LIMITED shall not be liable or responsible for any of such contents, including damage or loss resulting from any virus transmitted by this E-mail."\n************************************************************************************************************************`
+            },
+            'custom': {
+                name: 'กำหนดเอง',
+                subject: 'แจ้งข้อมูลเอกสารยืนยัน - [Account]',
+                body: `เรียน ลูกค้าผู้มีอุปการคุณ\n\nเอกสารยืนยันสำหรับเลขที่บัญชี [Account] ได้รับการประมวลผลเรียบร้อยแล้ว\nกรุณาตรวจสอบไฟล์แนบ [FileName]\n\nขอแสดงความนับถือ\nบริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)`
+            }
+        };
+
+        const DEFAULT_EMAIL_SUBJECT = EMAIL_PRESETS['bond_aomplus'].subject;
+        const DEFAULT_EMAIL_BODY = EMAIL_PRESETS['bond_aomplus'].body;
+
+        // Elements
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileMeta = document.getElementById('fileMeta');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressStatus = document.getElementById('progressStatus');
+        const statusMessage = document.getElementById('statusMessage');
+        const codeInputSection = document.getElementById('codeInputSection');
+        const pagesGrid = document.getElementById('pagesGrid');
+        const downloadSection = document.getElementById('downloadSection');
+        const patternConfig = document.getElementById('patternConfig');
+        const groupSummarySection = document.getElementById('groupSummarySection');
+        const groupList = document.getElementById('groupList');
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSmtpSettings();
+            initEmailTemplate();
+        });
+
+        function initEmailTemplate() {
+            const savedPreset = localStorage.getItem(EMAIL_PRESET_KEY) || 'bond_aomplus';
+            const presetSelect = document.getElementById('templatePreset');
+            if (presetSelect) presetSelect.value = savedPreset;
+
+            const savedSubject = localStorage.getItem(EMAIL_SUBJECT_KEY);
+            const savedBody = localStorage.getItem(EMAIL_BODY_KEY);
+
+            if (savedSubject) {
+                document.getElementById('emailSubject').value = savedSubject;
+            } else if (EMAIL_PRESETS[savedPreset]) {
+                document.getElementById('emailSubject').value = EMAIL_PRESETS[savedPreset].subject;
+            }
+
+            if (savedBody) {
+                document.getElementById('emailBody').value = savedBody;
+            } else if (EMAIL_PRESETS[savedPreset]) {
+                document.getElementById('emailBody').value = EMAIL_PRESETS[savedPreset].body;
+            }
+        }
+
+        function applyTemplatePreset(presetKey) {
+            localStorage.setItem(EMAIL_PRESET_KEY, presetKey);
+            if (EMAIL_PRESETS[presetKey]) {
+                document.getElementById('emailSubject').value = EMAIL_PRESETS[presetKey].subject;
+                document.getElementById('emailBody').value = EMAIL_PRESETS[presetKey].body;
+                showToast('success', `✨ โหลดเทมเพลต "${EMAIL_PRESETS[presetKey].name}" เรียบร้อยแล้ว`);
+            }
+        }
+
+        function resetCurrentTemplate() {
+            const presetKey = document.getElementById('templatePreset').value || 'bond_aomplus';
+            applyTemplatePreset(presetKey);
+        }
+
+        function insertTag(tagText) {
+            const textarea = document.getElementById('emailBody');
+            if (!textarea) return;
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+            textarea.value = text.substring(0, start) + tagText + text.substring(end);
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = start + tagText.length;
+            showToast('info', `แทรก ${tagText} แล้ว`);
+        }
+
+        // Upload handlers
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') handleFile(files[0]);
+        });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+
+        async function handleFile(file) {
+            originalFileName = file.name.replace('.pdf', '');
+            fileName.textContent = file.name;
+            fileMeta.textContent = `ขนาด: ${formatFileSize(file.size)}`;
+            fileInfo.classList.add('visible');
+            progressSection.style.display = 'block';
+            updateProgress(10, 'กำลังอ่านไฟล์ PDF...');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                pdfBytes = new Uint8Array(arrayBuffer);
+                updateProgress(20, 'กำลังวิเคราะห์โครงสร้าง PDF...');
+
+                pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+                pageCount = pdfDoc.numPages;
+                fileMeta.textContent = `ขนาด: ${formatFileSize(file.size)} • จำนวนหน้า: ${pageCount} หน้า`;
+                updateProgress(30, `กำลังอ่านข้อความจาก ${pageCount} หน้า...`);
+
+                pageTexts = [];
+                for (let i = 1; i <= pageCount; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const text = textContent.items.map(item => item.str).join(' ');
+                    pageTexts.push(text);
+                    updateProgress(30 + Math.round((i / pageCount) * 50), `อ่านหน้า ${i}/${pageCount}...`);
+                }
+
+                updateProgress(85, 'กำลังตรวจจับเลขที่บัญชี...');
+                detectedAccounts = pageTexts.map((text, idx) => detectAccountNumber(text, idx));
+                updateProgress(100, 'เสร็จสิ้น!');
+
+                setTimeout(() => {
+                    progressSection.style.display = 'none';
+                    renderPages();
+                    buildGroups();
+                    showStatus('success', `✅ อ่านไฟล์สำเร็จ! พบ ${pageCount} หน้า — กรุณาตรวจสอบเลขที่บัญชีแต่ละหน้า`);
+                }, 600);
+
+            } catch (error) {
+                console.error('Error processing PDF:', error);
+                showStatus('error', `❌ เกิดข้อผิดพลาด: ${error.message}`);
+                progressSection.style.display = 'none';
+            }
+        }
+
+        function detectAccountNumber(text, pageIndex) {
+            const customPattern = document.getElementById('codePattern')?.value;
+            if (customPattern) {
+                try {
+                    const regex = new RegExp(customPattern, 'gi');
+                    const match = regex.exec(text);
+                    if (match) {
+                        return { code: (match[1] || match[0]).trim(), auto: true, confidence: 'high' };
+                    }
+                } catch (e) { }
+            }
+
+            const custPatterns = [
+                /เลขที่บัญชี\s*(?:Cust\.?\s*No\.?)?\s*[:：]?\s*([A-Za-z]-?\d[\d\-]+\d)/,
+                /Cust\.?\s*No\.?\s*[:：]?\s*([A-Za-z]-?\d[\d\-]+\d)/i,
+                /Cust\.?\s*No\.?\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/i,
+                /Customer\s*(?:No\.?|Number|#|Code)?\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/i,
+            ];
+            for (const pat of custPatterns) {
+                const m = text.match(pat);
+                if (m) {
+                    return { code: m[1].trim(), auto: true, confidence: 'high' };
+                }
+            }
+
+            const thaiPatterns = [
+                /เลขที่บัญชี\s*[:：]?\s*([A-Za-z]-?\d[\d\-]+\d)/,
+                /เลขที่บัญชี\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/,
+                /บัญชีเลขที่\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/,
+                /เลขที่ลูกค้า\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/,
+                /หมายเลขบัญชี\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/,
+            ];
+            for (const pat of thaiPatterns) {
+                const m = text.match(pat);
+                if (m) return { code: m[1].trim(), auto: true, confidence: 'high' };
+            }
+
+            const acctPatterns = [
+                /(?:Account\s*(?:No\.?|Number|#))\s*[:：]?\s*([A-Za-z0-9][\w\-\/]{2,}[A-Za-z0-9])/i,
+                /(?:A\s*\/\s*C\s*(?:No\.?)?)\s*[:：]?\s*([A-Za-z0-9][\w\-\/]{2,}[A-Za-z0-9])/i,
+            ];
+            for (const pat of acctPatterns) {
+                const m = text.match(pat);
+                if (m) return { code: m[1].trim(), auto: true, confidence: 'high' };
+            }
+
+            const numberMatches = [...text.matchAll(/\b(\d{5,15})\b/g)];
+            const datePattern = /^(\d{2}[01]\d[12]\d{3}|[12]\d{3}[01]\d\d{2})$/;
+            const filtered = numberMatches.map(m => m[1]).filter(n => !datePattern.test(n));
+            if (filtered.length > 0) {
+                return { code: filtered[0], auto: true, confidence: 'low' };
+            }
+
+            return { code: `PAGE_${pageIndex + 1}`, auto: false, confidence: 'none' };
+        }
+
+        function extractDateFromFileName(name) {
+            const match = name.match(/(\d{2})(\d{2})(\d{4})/);
+            if (match) return `${match[1]}${match[2]}${match[3]}`;
+            const match2 = name.match(/(\d{2})[-\/](\d{2})[-\/](\d{4})/);
+            if (match2) return `${match2[1]}${match2[2]}${match2[3]}`;
+            const now = new Date();
+            return `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+        }
+
+        async function renderPages() {
+            pagesGrid.innerHTML = '';
+            const dateStr = extractDateFromFileName(originalFileName);
+
+            for (let i = 0; i < pageCount; i++) {
+                const card = document.createElement('div');
+                card.className = 'page-card';
+
+                const detected = detectedAccounts[i];
+                const code = detected.code;
+                const isAuto = detected.auto;
+                const confidence = detected.confidence;
+
+                let confidenceBadge = '';
+                if (isAuto) {
+                    const colors = { high: '#10b981', medium: '#f59e0b', low: '#ef4444' };
+                    const labels = { high: 'ตรวจจับได้แม่นยำ', medium: 'อาจไม่ถูกต้อง', low: 'ความมั่นใจต่ำ' };
+                    confidenceBadge = `
+                        <span class="detected-badge" style="color: ${colors[confidence]}; background: ${colors[confidence]}15;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="${confidence === 'high' ? 'M5 13l4 4L19 7' : 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z'}"/>
+                            </svg>
+                            ${labels[confidence]}
+                        </span>`;
+                }
+
+                card.innerHTML = `
+                    <div class="page-card-header">
+                        <span><strong>หน้าที่ ${i + 1}</strong> / ${pageCount}</span>
+                        ${confidenceBadge}
+                    </div>
+                    <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:4px;">เลขที่บัญชี:</label>
+                    <input type="text" 
+                           class="code-input ${isAuto ? 'detected' : ''}" 
+                           id="codeInput_${i}" 
+                           value="${escapeHtml(code)}" 
+                           data-page="${i}"
+                           oninput="onCodeInputChange(${i})">
+                    <div class="filename-preview" id="preview_${i}">
+                        <span>📄</span> <span class="preview-text">${escapeHtml(code)}_${dateStr}.pdf</span>
+                    </div>
+                `;
+
+                pagesGrid.appendChild(card);
+            }
+
+            codeInputSection.classList.add('visible');
+        }
+
+        function onCodeInputChange(pageIndex) {
+            updateFilenamePreview(pageIndex);
+            buildGroups();
+        }
+
+        function updateFilenamePreview(pageIndex) {
+            const input = document.getElementById(`codeInput_${pageIndex}`);
+            const preview = document.getElementById(`preview_${pageIndex}`);
+            if (!input || !preview) return;
+
+            const val = input.value.trim() || `PAGE_${pageIndex + 1}`;
+            const dateStr = extractDateFromFileName(originalFileName);
+            preview.querySelector('.preview-text').textContent = `${val}_${dateStr}.pdf`;
+        }
+
+        function buildGroups() {
+            accountGroups = {};
+            const dateStr = extractDateFromFileName(originalFileName);
+
+            for (let i = 0; i < pageCount; i++) {
+                const input = document.getElementById(`codeInput_${i}`);
+                const acct = input ? input.value.trim() || `PAGE_${i + 1}` : `PAGE_${i + 1}`;
+
+                if (!accountGroups[acct]) {
+                    accountGroups[acct] = [];
+                }
+                accountGroups[acct].push(i);
+            }
+
+            const accounts = Object.keys(accountGroups);
+            groupList.innerHTML = '';
+
+            for (const acct of accounts) {
+                const pages = accountGroups[acct];
+                const item = document.createElement('div');
+                item.className = 'group-item';
+                const pageLabel = pages.length === 1
+                    ? `หน้า ${pages[0] + 1}`
+                    : `${pages.length} หน้า (${pages.map(p => p + 1).join(', ')})`;
+
+                item.innerHTML = `
+                    <div>
+                        <div class="group-acct">📁 ${escapeHtml(acct)}_${dateStr}.pdf</div>
+                        <div class="group-pages">${pageLabel}</div>
+                    </div>
+                    <span style="font-size:0.75rem; color:#10b981; font-weight:600;">${pages.length} หน้า</span>
+                `;
+                groupList.appendChild(item);
+            }
+
+            groupSummarySection.classList.add('visible');
+            downloadSection.classList.add('visible');
+
+            renderEmailMapping();
+        }
+
+        async function downloadAllAsZip() {
+            const accounts = Object.keys(accountGroups);
+            if (accounts.length === 0) return;
+
+            const btn = document.getElementById('btnDownloadZip');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> กำลังสร้าง ZIP...';
+
+            try {
+                const zip = new JSZip();
+                const { PDFDocument } = PDFLib;
+                const srcDoc = await PDFDocument.load(pdfBytes);
+                const dateStr = extractDateFromFileName(originalFileName);
+
+                let done = 0;
+                for (const acct of accounts) {
+                    const pages = accountGroups[acct];
+                    const newDoc = await PDFDocument.create();
+                    const copiedPages = await newDoc.copyPages(srcDoc, pages);
+                    copiedPages.forEach(page => newDoc.addPage(page));
+                    const newPdfBytes = await newDoc.save();
+
+                    const filename = `${acct}_${dateStr}.pdf`;
+                    zip.file(filename, newPdfBytes);
+
+                    done++;
+                    showStatus('success', `⚙️ กำลังประมวลผล ${done}/${accounts.length} บัญชี...`);
+                }
+
+                showStatus('success', '📦 กำลังบีบอัดไฟล์ ZIP...');
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                const zipName = `${originalFileName}_split_${accounts.length}accounts.zip`;
+                downloadBlob(zipBlob, zipName);
+
+                showStatus('success', `✅ ดาวน์โหลดสำเร็จ! รวมทั้งหมด ${accounts.length} บัญชี (${pageCount} หน้า)`);
+                showToast('success', `📦 บันทึก ${zipName} เรียบร้อย!`);
+            } catch (error) {
+                console.error('Error creating ZIP:', error);
+                showStatus('error', `❌ เกิดข้อผิดพลาด: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> ดาวน์โหลดทั้งหมด (ZIP)';
+            }
+        }
+
+        async function downloadAllSeparately() {
+            const accounts = Object.keys(accountGroups);
+            if (accounts.length === 0) return;
+
+            const btn = document.getElementById('btnDownloadSep');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> กำลังดาวน์โหลด...';
+
+            try {
+                const { PDFDocument } = PDFLib;
+                const srcDoc = await PDFDocument.load(pdfBytes);
+                const dateStr = extractDateFromFileName(originalFileName);
+
+                for (let i = 0; i < accounts.length; i++) {
+                    const acct = accounts[i];
+                    const pages = accountGroups[acct];
+                    const newDoc = await PDFDocument.create();
+                    const copiedPages = await newDoc.copyPages(srcDoc, pages);
+                    copiedPages.forEach(page => newDoc.addPage(page));
+                    const newPdfBytes = await newDoc.save();
+
+                    const filename = `${acct}_${dateStr}.pdf`;
+                    const blob = new Blob([newPdfBytes], { type: 'application/pdf' });
+                    downloadBlob(blob, filename);
+
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                showToast('success', `✅ ดาวน์โหลดสำเร็จทั้ง ${accounts.length} ไฟล์!`);
+            } catch (error) {
+                console.error('Error downloading files:', error);
+                showToast('error', `❌ เกิดข้อผิดพลาด: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> ดาวน์โหลดทีละไฟล์';
+            }
+        }
+
+        function reDetectCodes() {
+            if (!pageTexts.length) return;
+            detectedAccounts = pageTexts.map((text, idx) => detectAccountNumber(text, idx));
+            for (let i = 0; i < pageCount; i++) {
+                const input = document.getElementById(`codeInput_${i}`);
+                if (input) {
+                    input.value = detectedAccounts[i].code;
+                    input.className = `code-input ${detectedAccounts[i].auto ? 'detected' : ''}`;
+                    updateFilenamePreview(i);
+                }
+            }
+            buildGroups();
+            showToast('success', '🔍 ตรวจจับเลขที่บัญชีใหม่เสร็จสิ้น');
+        }
+
+        function togglePatternConfig() {
+            patternConfig.classList.toggle('visible');
+        }
+
+        // ==================== EMAIL MAPPING FUNCTIONS ====================
+
+        function renderEmailMapping() {
+            const section = document.getElementById('emailMappingSection');
+            const list = document.getElementById('emailMappingList');
+            const accounts = Object.keys(accountGroups);
+
+            if (accounts.length === 0) {
+                section.classList.remove('visible');
+                return;
+            }
+
+            loadEmailMappingFromStorage();
+
+            list.innerHTML = '';
+
+            for (let i = 0; i < accounts.length; i++) {
+                const acct = accounts[i];
+                const pages = accountGroups[acct];
+                const savedEmail = emailMapping[acct] || '';
+                const cName = customerData[acct]?.['CustomerName'] || customerData[acct]?.['ชื่อลูกค้า'] || '';
+
+                const card = document.createElement('div');
+                card.className = 'email-mapping-card';
+                card.style.cssText = 'background:#1a2035; border-radius:12px; border:1px solid rgba(99,102,241,0.2); padding:14px 18px; margin-bottom:10px; transition:all 0.3s ease;';
+
+                card.innerHTML = `
+                    <div class="email-mapping-row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <div class="acct-label" style="font-weight:700; font-size:0.95rem; color:#6366f1; min-width:140px; display:flex; align-items:center; gap:8px;">
+                            <div style="width:28px; height:28px; border-radius:6px; background:linear-gradient(135deg, #6366f1, #8b5cf6); display:flex; align-items:center; justify-content:center; font-size:0.75rem; color:white; flex-shrink:0;">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div>
+                                <div>${escapeHtml(acct)}</div>
+                                <div style="font-size:0.72rem; color:#64748b; font-weight:400;">
+                                    ${escapeHtml(cName ? cName + ' • ' : '')}${pages.length} หน้า
+                                </div>
+                            </div>
+                        </div>
+                        <input type="email" class="email-input" 
+                               id="emailInput_${i}" 
+                               data-account="${escapeHtml(acct)}"
+                               value="${escapeHtml(savedEmail)}" 
+                               placeholder="อีเมลลูกค้า เช่น customer@example.com"
+                               oninput="validateEmailInput(this)">
+                        <button class="btn btn-sm btn-email-sm" onclick="sendEmailForAccount('${escapeHtml(acct)}')" title="ส่งทาง Outlook / Mail Client">
+                            <i class="fa-solid fa-envelope"></i> Outlook
+                        </button>
+                    </div>
+                `;
+
+                list.appendChild(card);
+
+                const input = card.querySelector('.email-input');
+                if (savedEmail) validateEmailInput(input);
+            }
+
+            section.classList.add('visible');
+            updateEmailStats();
+        }
+
+        function validateEmailInput(input) {
+            const email = input.value.trim();
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            input.classList.remove('valid', 'invalid');
+            if (email === '') return;
+
+            if (emailRegex.test(email)) {
+                input.classList.add('valid');
+            } else {
+                input.classList.add('invalid');
+            }
+
+            const acct = input.dataset.account;
+            if (acct) {
+                emailMapping[acct] = email;
+            }
+
+            updateEmailStats();
+        }
+
+        function updateEmailStats() {
+            const statsEl = document.getElementById('emailStats');
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            let configured = 0;
+            let missing = 0;
+
+            const inputs = document.querySelectorAll('.email-input');
+            inputs.forEach(input => {
+                const email = input.value.trim();
+                if (email && emailRegex.test(email)) {
+                    configured++;
+                } else {
+                    missing++;
+                }
+            });
+
+            statsEl.innerHTML = `
+                <span class="email-stat configured">✅ ตั้งค่า Email แล้ว: ${configured} บัญชี</span>
+                ${missing > 0 ? `<span class="email-stat missing">⚠️ ยังไม่ได้ระบุ Email: ${missing} บัญชี</span>` : ''}
+            `;
+        }
+
+        function saveEmailMapping() {
+            collectEmailMapping();
+            localStorage.setItem(EMAIL_STORAGE_KEY, JSON.stringify(emailMapping));
+            localStorage.setItem(EMAIL_CUSTOMER_DATA_KEY, JSON.stringify(customerData));
+
+            const subject = document.getElementById('emailSubject').value.trim();
+            localStorage.setItem(EMAIL_SUBJECT_KEY, subject);
+
+            const body = document.getElementById('emailBody').value;
+            localStorage.setItem(EMAIL_BODY_KEY, body);
+
+            saveSmtpSettings();
+
+            showToast('success', '💾 บันทึก Email Mapping และการตั้งค่าสำเร็จ!');
+        }
+
+        function loadEmailMapping() {
+            loadEmailMappingFromStorage();
+
+            const inputs = document.querySelectorAll('.email-input');
+            inputs.forEach(input => {
+                const acct = input.dataset.account;
+                if (acct && emailMapping[acct]) {
+                    input.value = emailMapping[acct];
+                    validateEmailInput(input);
+                }
+            });
+
+            const savedSubject = localStorage.getItem(EMAIL_SUBJECT_KEY);
+            if (savedSubject) document.getElementById('emailSubject').value = savedSubject;
+
+            const savedBody = localStorage.getItem(EMAIL_BODY_KEY);
+            if (savedBody) document.getElementById('emailBody').value = savedBody;
+
+            updateEmailStats();
+            showToast('success', '📂 โหลด Email Mapping สำเร็จ!');
+        }
+
+        function loadEmailMappingFromStorage() {
+            try {
+                const saved = localStorage.getItem(EMAIL_STORAGE_KEY);
+                if (saved) emailMapping = JSON.parse(saved);
+            } catch (e) {
+                emailMapping = {};
+            }
+
+            try {
+                const savedCust = localStorage.getItem(EMAIL_CUSTOMER_DATA_KEY);
+                if (savedCust) customerData = JSON.parse(savedCust);
+            } catch (e) {
+                customerData = {};
+            }
+        }
+
+        function collectEmailMapping() {
+            const inputs = document.querySelectorAll('.email-input');
+            inputs.forEach(input => {
+                const acct = input.dataset.account;
+                const email = input.value.trim();
+                if (acct) {
+                    emailMapping[acct] = email;
+                }
+            });
+        }
+
+        function saveSmtpSettings() {
+            const settings = {
+                host: document.getElementById('smtpHost').value.trim(),
+                port: document.getElementById('smtpPort').value.trim(),
+                secure: document.getElementById('smtpSecure').value,
+                user: document.getElementById('smtpUser').value.trim(),
+                pass: document.getElementById('smtpPass').value.trim()
+            };
+            localStorage.setItem(EMAIL_SMTP_KEY, JSON.stringify(settings));
+        }
+
+        function loadSmtpSettings() {
+            try {
+                const saved = localStorage.getItem(EMAIL_SMTP_KEY);
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    if (settings.host) document.getElementById('smtpHost').value = settings.host;
+                    if (settings.port) document.getElementById('smtpPort').value = settings.port;
+                    if (settings.secure !== undefined) document.getElementById('smtpSecure').value = settings.secure;
+                    if (settings.user) document.getElementById('smtpUser').value = settings.user;
+                    if (settings.pass) document.getElementById('smtpPass').value = settings.pass;
+                }
+            } catch (e) { }
+        }
+
+        async function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                    
+                    let matchCount = 0;
+                    const pdfAccts = Object.keys(accountGroups);
+
+                    jsonData.forEach(row => {
+                        const keys = Object.keys(row);
+                        
+                        let acctKey = keys.find(k => {
+                            const lk = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return lk === 'account' || lk === 'accout' || lk === 'acct' || k.includes('เลขที่บัญชี') || k.includes('รหัสลูกค้า');
+                        }) || keys.find(k => k.toLowerCase().includes('account') || k.toLowerCase().includes('accout'));
+                        
+                        let emailKey = keys.find(k => {
+                            const lk = k.toLowerCase();
+                            return (lk.includes('email') || lk.includes('e-mail') || lk.includes('อีเมล') || lk.includes('e-statement')) && !lk.includes('account');
+                        });
+                        
+                        if (!emailKey) {
+                            emailKey = keys.find(k => String(row[k] || '').includes('@'));
+                        }
+
+                        if (acctKey && emailKey) {
+                            const rawAcct = String(row[acctKey]).trim();
+                            const rawEmail = String(row[emailKey]).trim();
+                            
+                            if (rawAcct && rawEmail && rawEmail.includes('@')) {
+                                const cleanRaw = rawAcct.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                                
+                                if (cleanRaw.length >= 3) {
+                                    for (const pdfAcct of pdfAccts) {
+                                        const cleanPdf = pdfAcct.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                                        if (cleanPdf.includes(cleanRaw) || cleanRaw.includes(cleanPdf)) {
+                                            emailMapping[pdfAcct] = rawEmail;
+                                            customerData[pdfAcct] = { ...row };
+                                            matchCount++;
+                                            break; 
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    if (matchCount > 0) {
+                        renderEmailMapping();
+                        showToast('success', `✅ นำเข้าสำเร็จ และจับคู่ได้ ${matchCount} บัญชี`);
+                    } else {
+                        showToast('warning', `⚠️ ไม่พบข้อมูลบัญชีที่ตรงกันเลย โปรดตรวจสอบชื่อคอลัมน์ใน Excel`);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast('error', `❌ เกิดข้อผิดพลาดในการอ่านไฟล์ Excel`);
+                }
+                
+                event.target.value = '';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Build email body for a single account with complete dynamic placeholder replacement
+        function buildEmailBody(acct) {
+            const pages = accountGroups[acct] || [];
+            const dateStr = extractDateFromFileName(originalFileName);
+            const filename = `${acct}_${dateStr}.pdf`;
+            const today = new Date();
+            const thaiDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear() + 543}`;
+
+            const cData = customerData[acct] || {};
+            const cName = cData['CustomerName'] || cData['ชื่อลูกค้า'] || cData['Name'] || acct;
+
+            let template = document.getElementById('emailBody')?.value || DEFAULT_EMAIL_BODY;
+            
+            // Standard variable replacement
+            template = template.replace(/\[Account\]/gi, acct)
+                               .replace(/\[CustomerCode\]/gi, acct)
+                               .replace(/\[CustomerName\]/gi, cName)
+                               .replace(/\[FileName\]/gi, filename)
+                               .replace(/\[PageCount\]/gi, pages.length)
+                               .replace(/\[PagesIncluded\]/gi, pages.map(p => p + 1).join(', '))
+                               .replace(/\[OriginalFile\]/gi, originalFileName + '.pdf')
+                               .replace(/\[Date\]/gi, thaiDate)
+                               .replace(/\[BondName\]/gi, cData['BondName'] || 'ออมพลัส')
+                               .replace(/\[BondCode\]/gi, cData['BondCode'] || 'RBP368A')
+                               .replace(/\[FiscalYear\]/gi, cData['FiscalYear'] || '2569')
+                               .replace(/\[IssueNo\]/gi, cData['IssueNo'] || '1')
+                               .replace(/\[OfferPeriod\]/gi, cData['OfferPeriod'] || '3-5 สิงหาคม 2569')
+                               .replace(/\[BookingDateTime\]/gi, cData['BookingDateTime'] || `${thaiDate} เวลาที่ทำรายการ`)
+                               .replace(/\[AllocatedUnits\]/gi, cData['AllocatedUnits'] || '-')
+                               .replace(/\[AllocatedUnitsText\]/gi, cData['AllocatedUnitsText'] || '-')
+                               .replace(/\[AllocatedAmount\]/gi, cData['AllocatedAmount'] || '-')
+                               .replace(/\[AllocatedAmountText\]/gi, cData['AllocatedAmountText'] || '-')
+                               .replace(/\[RefundAmount\]/gi, cData['RefundAmount'] || '-')
+                               .replace(/\[RefundAmountText\]/gi, cData['RefundAmountText'] || '-');
+
+            // Custom Excel columns replacement
+            Object.keys(cData).forEach(k => {
+                const reg = new RegExp(`\\[${k}\\]`, 'gi');
+                template = template.replace(reg, cData[k] !== undefined ? cData[k] : '');
+            });
+
+            return template;
+        }
+
+        // Build subject line with dynamic placeholders
+        function buildEmailSubject(acct) {
+            const dateStr = extractDateFromFileName(originalFileName);
+            const cData = customerData[acct] || {};
+            const cName = cData['CustomerName'] || cData['ชื่อลูกค้า'] || acct;
+            const today = new Date();
+            const thaiDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear() + 543}`;
+
+            let subject = document.getElementById('emailSubject').value.trim() || DEFAULT_EMAIL_SUBJECT;
+            subject = subject.replace(/\[Account\]/gi, acct)
+                             .replace(/\[CustomerName\]/gi, cName)
+                             .replace(/\[Date\]/gi, thaiDate)
+                             .replace(/\[BondName\]/gi, cData['BondName'] || 'ออมพลัส')
+                             .replace(/\[BondCode\]/gi, cData['BondCode'] || 'RBP368A');
+
+            return subject;
+        }
+
+        // Send email for a single account via mailto:
+        function sendEmailForAccount(acct) {
+            collectEmailMapping();
+            const email = emailMapping[acct];
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            if (!email || !emailRegex.test(email)) {
+                showToast('error', `❌ ไม่พบ Email สำหรับบัญชี ${acct} หรือ Email ไม่ถูกต้อง`);
+                document.getElementById('emailMappingSection').scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+
+            const subject = buildEmailSubject(acct);
+            const dateStr = extractDateFromFileName(originalFileName);
+            const filename = `${acct}_${dateStr}.pdf`;
+            const body = buildEmailBody(acct);
+
+            const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.open(mailtoUrl, '_blank');
+
+            showToast('success', `📧 เปิด Outlook สำหรับ ${acct} → ${email}`);
+            addEmailLog('sent', `${acct} → ${email} (${filename})`);
+        }
+
+        // Send all emails automatically via Node.js backend
+        async function sendAllEmails() {
+            collectEmailMapping();
+            saveSmtpSettings();
+
+            const accounts = Object.keys(accountGroups);
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+            const smtpHost = document.getElementById('smtpHost').value.trim();
+            const smtpPort = document.getElementById('smtpPort').value.trim();
+            const smtpUser = document.getElementById('smtpUser').value.trim();
+            const smtpPass = document.getElementById('smtpPass').value.trim();
+            const smtpSecure = document.getElementById('smtpSecure').value;
+            const subject = document.getElementById('emailSubject').value.trim() || DEFAULT_EMAIL_SUBJECT;
+            const bodyTemplate = document.getElementById('emailBody').value || DEFAULT_EMAIL_BODY;
+            
+            if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
+                showToast('error', '❌ กรุณากรอกข้อมูลตั้งค่า SMTP Server ให้ครบถ้วน');
+                document.getElementById('emailMappingSection').scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+
+            const dateStr = extractDateFromFileName(originalFileName);
+
+            let validCount = 0;
+            let skipCount = 0;
+            const validAccounts = [];
+
+            for (const acct of accounts) {
+                const email = emailMapping[acct];
+                if (email && emailRegex.test(email)) {
+                    validCount++;
+                    validAccounts.push(acct);
+                } else {
+                    skipCount++;
+                }
+            }
+
+            if (validCount === 0) {
+                showToast('error', '❌ ไม่มีบัญชีที่ตั้งค่า Email ที่ถูกต้อง กรุณาตั้งค่า Email ก่อน');
+                return;
+            }
+
+            const confirmed = confirm(
+                `📧 จะส่ง Email อัตโนมัติไปยังเซิร์ฟเวอร์สำหรับ ${validCount} บัญชี\n` +
+                (skipCount > 0 ? `⚠️ ข้าม ${skipCount} บัญชี (ไม่มี Email)\n\n` : '\n') +
+                `ระบบจะส่งไฟล์แนบ PDF เฉพาะของแต่ละบัญชีไปยังอีเมลของลูกค้ารายนั้นๆ\n\n` +
+                `ต้องการดำเนินการต่อหรือไม่?`
+            );
+
+            if (!confirmed) return;
+
+            const logEl = document.getElementById('emailLog');
+            logEl.innerHTML = '';
+            document.getElementById('emailSendProgress').classList.add('visible');
+
+            const btn = document.getElementById('btnSendEmail');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> กำลังส่งมอบอีเมล...';
+
+            try {
+                const today = new Date();
+                const thaiDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear() + 543}`;
+
+                // 1. Prepare Excel Data with complete dynamic variables
+                const excelData = [];
+                for (const acct of validAccounts) {
+                    const email = emailMapping[acct];
+                    const filename = `${acct}_${dateStr}.pdf`;
+                    const pages = accountGroups[acct];
+                    const cData = customerData[acct] || {};
+
+                    const rowObj = {
+                        'Account': acct,
+                        'CustomerCode': acct,
+                        'CustomerName': cData['CustomerName'] || cData['ชื่อลูกค้า'] || cData['Name'] || acct,
+                        'Email': email,
+                        'FileName': filename,
+                        'PageCount': pages.length,
+                        'PagesIncluded': pages.map(p => p + 1).join(', '),
+                        'OriginalFile': originalFileName + '.pdf',
+                        'Date': thaiDate,
+                        'BondName': cData['BondName'] || 'ออมพลัส',
+                        'BondCode': cData['BondCode'] || 'RBP368A',
+                        'FiscalYear': cData['FiscalYear'] || '2569',
+                        'IssueNo': cData['IssueNo'] || '1',
+                        'OfferPeriod': cData['OfferPeriod'] || '3-5 สิงหาคม 2569',
+                        'BookingDateTime': cData['BookingDateTime'] || `${thaiDate} เวลาที่ทำรายการ`,
+                        'AllocatedUnits': cData['AllocatedUnits'] || '-',
+                        'AllocatedUnitsText': cData['AllocatedUnitsText'] || '-',
+                        'AllocatedAmount': cData['AllocatedAmount'] || '-',
+                        'AllocatedAmountText': cData['AllocatedAmountText'] || '-',
+                        'RefundAmount': cData['RefundAmount'] || '-',
+                        'RefundAmountText': cData['RefundAmountText'] || '-'
+                    };
+
+                    // Include any extra columns from the imported Excel
+                    Object.keys(cData).forEach(k => {
+                        if (rowObj[k] === undefined) {
+                            rowObj[k] = cData[k];
+                        }
+                    });
+
+                    excelData.push(rowObj);
+                }
+
+                const worksheet = XLSX.utils.json_to_sheet(excelData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Recipients');
+                const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                // 2. Prepare FormData
+                const formData = new FormData();
+                formData.append('excelFile', excelBlob, 'recipients.xlsx');
+                formData.append('smtpHost', smtpHost);
+                formData.append('smtpPort', smtpPort);
+                formData.append('smtpUser', smtpUser);
+                formData.append('smtpPass', smtpPass);
+                formData.append('smtpSecure', smtpSecure);
+                formData.append('subject', subject);
+                formData.append('body', bodyTemplate);
+
+                // 3. Generate PDFs and append as attachments
+                const { PDFDocument } = PDFLib;
+                const srcDoc = await PDFDocument.load(pdfBytes);
+                
+                addEmailLog('sent', `กำลังเตรียมไฟล์ PDF แยกตามบัญชี ${validCount} ไฟล์...`);
+                
+                for (const acct of validAccounts) {
+                    const pages = accountGroups[acct];
+                    const newDoc = await PDFDocument.create();
+                    const copiedPages = await newDoc.copyPages(srcDoc, pages);
+                    copiedPages.forEach(page => newDoc.addPage(page));
+                    const newPdfBytes = await newDoc.save();
+                    const filename = `${acct}_${dateStr}.pdf`;
+                    
+                    const pdfBlob = new Blob([newPdfBytes], { type: 'application/pdf' });
+                    formData.append('attachmentFiles', pdfBlob, filename);
+                }
+
+                addEmailLog('sent', `ส่งคำสั่งไปยัง AutoMail Backend...`);
+                
+                // 4. Send API request
+                const response = await fetch('/api/send-emails', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('success', `✅ ${result.message}`);
+                    addEmailLog('sent', `━━━ ${result.message} ━━━`);
+                    if (result.errors && result.errors.length > 0) {
+                        result.errors.forEach(err => addEmailLog('error', err));
+                    }
+                    saveDailyEmailLog(validCount, accounts.length, dateStr);
+                } else {
+                    showToast('error', `❌ เกิดข้อผิดพลาด: ${result.message}`);
+                    addEmailLog('error', `❌ Server Error: ${result.message}`);
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('error', `❌ เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์`);
+                addEmailLog('error', `❌ Network Error: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> ส่ง Email อัตโนมัติ (AutoMail Server)';
+            }
+        }
+
+        function addEmailLog(type, message) {
+            const logEl = document.getElementById('emailLog');
+            const item = document.createElement('div');
+            item.className = `email-log-item ${type}`;
+
+            const icons = { sent: '✅', skipped: '⚠️', error: '❌' };
+            item.innerHTML = `<span>${icons[type] || '•'}</span> <span>${escapeHtml(message)}</span>`;
+
+            logEl.appendChild(item);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function saveDailyEmailLog(sentCount, totalCount, dateStr) {
+            const key = `email_log_${dateStr}`;
+            const now = new Date();
+            const log = {
+                date: dateStr,
+                timestamp: now.toISOString(),
+                time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+                sentCount: sentCount,
+                totalCount: totalCount,
+                fileName: originalFileName
+            };
+
+            let existing = [];
+            try {
+                const saved = localStorage.getItem(key);
+                if (saved) existing = JSON.parse(saved);
+            } catch (e) { existing = []; }
+
+            existing.push(log);
+            localStorage.setItem(key, JSON.stringify(existing));
+        }
+
+        // Utility Functions
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function updateProgress(pct, status) {
+            progressFill.style.width = pct + '%';
+            progressPercent.textContent = pct + '%';
+            progressStatus.textContent = status;
+        }
+
+        function showStatus(type, message) {
+            statusMessage.className = `status-message visible ${type}`;
+            statusMessage.innerHTML = message;
+        }
+
+        function showToast(type, message) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function resetApp() {
+            pdfBytes = null;
+            pdfDoc = null;
+            pageTexts = [];
+            pageCount = 0;
+            detectedAccounts = [];
+            accountGroups = {};
+            originalFileName = '';
+            fileInput.value = '';
+            fileInfo.classList.remove('visible');
+            progressSection.style.display = 'none';
+            statusMessage.className = 'status-message';
+            codeInputSection.classList.remove('visible');
+            downloadSection.classList.remove('visible');
+            groupSummarySection.classList.remove('visible');
+            patternConfig.classList.remove('visible');
+            pagesGrid.innerHTML = '';
+            groupList.innerHTML = '';
+            document.getElementById('emailMappingSection').classList.remove('visible');
+            document.getElementById('emailSendProgress').classList.remove('visible');
+            document.getElementById('emailLog').innerHTML = '';
+        }
+    </script>
+</body>
+
+</html>

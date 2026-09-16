@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LHSEC Portal - ขอเปิดบัญชีเพิ่มเติม</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Prompt:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #004d80;
+            /* LHSEC Blue */
+            --primary-hover: #003b63;
+            --primary-light: #f0f7ff;
+            --secondary: #64748b;
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --radius: 12px;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Prompt', 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Header mimicking Portal */
+        .portal-header {
+            background-color: var(--primary);
+            color: white;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .portal-logo {
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .portal-user {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 860px;
+            margin: 40px auto;
+            padding: 0 20px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        /* Stepper */
+        .stepper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            position: relative;
+            padding: 0 40px;
+        }
+
+        .stepper::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 60px;
+            right: 60px;
+            height: 2px;
+            background-color: var(--border);
+            z-index: 0;
+        }
+
+        .stepper-progress {
+            position: absolute;
+            top: 20px;
+            left: 60px;
+            height: 2px;
+            background-color: var(--primary);
+            z-index: 1;
+            transition: var(--transition);
+            width: 0%;
+        }
+
+        .step {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            width: 100px;
+        }
+
+        .step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--surface);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: var(--transition);
+        }
+
+        .step.active .step-circle {
+            border-color: var(--primary);
+            color: var(--primary);
+            background-color: var(--primary-light);
+            box-shadow: 0 0 0 4px rgba(0, 77, 128, 0.1);
+        }
+
+        .step.completed .step-circle {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .step-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .step.active .step-label {
+            color: var(--primary);
+        }
+
+        /* Main Content Area */
+        .content-card {
+            background-color: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-md);
+            padding: 40px;
+            min-height: 400px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-content {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .step-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Step 1: Account Selection */
+        .account-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .account-card {
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+        }
+
+        .account-card:hover:not(.disabled) {
+            border-color: var(--primary);
+            box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .account-card.selected {
+            border-color: var(--primary);
+            background-color: var(--primary-light);
+            box-shadow: inset 0 0 0 1px var(--primary);
+        }
+
+        .account-card.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 24px;
+            height: 24px;
+            background-color: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .account-card.disabled {
+            background-color: #f1f5f9;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .card-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            flex: 1;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-top: 8px;
+            align-self: flex-start;
+        }
+
+        .badge-outline {
+            background-color: white;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        .badge-success {
+            background-color: var(--success-light);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .account-card.selected .badge-outline {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        /* Step 2: Information */
+        .info-section {
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            background-color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .info-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .info-value {
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: var(--transition);
+            background-color: white;
+        }
+
+        .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 32px 20px;
+            text-align: center;
+            background-color: #fcfcfc;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .upload-zone:hover {
+            border-color: var(--primary);
+            background-color: var(--primary-light);
+        }
+
+        .upload-icon {
+            font-size: 24px;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+
+        .upload-text {
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .upload-subtext {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Step 3: Terms */
+        .terms-box {
+            background-color: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .checkbox-label input {
+            margin-top: 4px;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .auth-panel {
+            background-color: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .pin-inputs {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .pin-input {
+            width: 45px;
+            height: 55px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1.5rem;
+            text-align: center;
+            font-weight: 600;
+            background-color: #f8fafc;
+        }
+
+        .pin-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background-color: white;
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        /* Step 4: Success */
+        .success-content {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background-color: var(--success-light);
+            color: var(--success);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin: 0 auto 24px;
+            animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes scaleIn {
+            0% {
+                transform: scale(0);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .success-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--success);
+            margin-bottom: 8px;
+        }
+
+        .success-subtitle {
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+
+        .receipt-card {
+            background-color: #f8fafc;
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 400px;
+            margin: 0 auto 32px;
+            text-align: left;
+        }
+
+        .receipt-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .receipt-row:last-child {
+            border-bottom: none;
+        }
+
+        .receipt-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .receipt-value {
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        /* Actions */
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        .actions-right {
+            display: flex;
+            gap: 12px;
+            margin-left: auto;
+        }
+
+        .actions-center {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 1rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            box-shadow: 0 4px 12px rgba(0, 77, 128, 0.2);
+        }
+
+        .btn-primary:disabled {
+            background-color: #cbd5e1;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .btn-outline {
+            background-color: white;
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+
+        .btn-outline:hover {
+            background-color: var(--bg);
+            border-color: #cbd5e1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="portal-header">
+        <div class="portal-logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/event">
+                <rect width="24" height="24" rx="4" fill="white" />
+                <path d="M6 18V6H8.5V15.5H18V18H6Z" fill="#004d80" />
+            </svg>
+            LHSEC Portal
+        </div>
+        <div class="portal-user">
+            👤 วัฒนา ทรงมะลิวัลย์ (012236)
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="page-header" id="pageHeader">
+            <h1 class="page-title">ขอเปิดบัญชีเพิ่มเติม</h1>
+            <p class="page-subtitle">เลือกประเภทบัญชีที่คุณต้องการเปิดบริการเพิ่ม เพื่อโอกาสการลงทุนที่กว้างขึ้น</p>
+        </div>
+
+        <div class="stepper" id="stepper">
+            <div class="stepper-progress" id="stepperProgress"></div>
+            <div class="step active" data-step="1">
+                <div class="step-circle">1</div>
+                <div class="step-label">เลือกประเภทบัญชี</div>
+            </div>
+            <div class="step" data-step="2">
+                <div class="step-circle">2</div>
+                <div class="step-label">ตรวจสอบข้อมูล</div>
+            </div>
+            <div class="step" data-step="3">
+                <div class="step-circle">3</div>
+                <div class="step-label">ยืนยันรายการ</div>
+            </div>
+        </div>
+
+        <div class="content-card">
+
+            <!-- Step 1 Content -->
+            <div class="step-content active" id="step1">
+                <div class="account-grid">
+                    <div class="account-card" onclick="selectAccount(this, 'TFEX')">
+                        <div class="card-icon">📈</div>
+                        <h3 class="card-title">TFEX (อนุพันธ์)</h3>
+                        <p class="card-desc">ซื้อขายสัญญาซื้อขายล่วงหน้า เพื่อสร้างโอกาสทำกำไรทั้งตลาดขาขึ้นและขาลง</p>
+                        <span class="badge badge-outline">+ เลือกเปิดบัญชี</span>
+                    </div>
+
+                    <div class="account-card" onclick="selectAccount(this, 'Global Trade')">
+                        <div class="card-icon">🌍</div>
+                        <h3 class="card-title">Global Trade</h3>
+                        <p class="card-desc">ขยายโอกาสการลงทุนในหุ้นต่างประเทศทั่วโลก เข้าถึงบริษัทชั้นนำระดับโลก</p>
+                        <span class="badge badge-outline">+ เลือกเปิดบัญชี</span>
+                    </div>
+
+                    <div class="account-card disabled">
+                        <div class="card-icon">📊</div>
+                        <h3 class="card-title">Fund Connext</h3>
+                        <p class="card-desc">ซื้อขายกองทุนรวมได้หลากหลาย บลจ. จบในแอปเดียว</p>
+                        <span class="badge badge-success">✓ มีบัญชีนี้แล้ว</span>
+                    </div>
+
+                    <div class="account-card disabled">
+                        <div class="card-icon">🏢</div>
+                        <h3 class="card-title">Equity (หุ้นไทย)</h3>
+                        <p class="card-desc">บัญชีซื้อขายหลักทรัพย์ไทย หุ้นปันผล หุ้นเติบโต</p>
+                        <span class="badge badge-success">✓ มีบัญชีนี้แล้ว</span>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <div class="actions-right">
+                        <button class="btn btn-primary" id="btnNext1" onclick="nextStep()" disabled>ถัดไป ➔</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2 Content -->
+            <div class="step-content" id="step2">
+
+                <div class="info-section">
+                    <h3 class="section-title">👤 ข้อมูลบัญชีเดิมที่ใช้อยู่</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">ชื่อ-นามสกุล</span>
+                            <span class="info-value">นาย วัฒนา ทรงมะลิวัลย์</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">เลขประจำตัวประชาชน / Cust Code</span>
+                            <span class="info-value">3-1002-xxxx-xx-x / 012236</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">บัญชีธนาคาร (ATS เดิม)</span>
+                            <span class="info-value">ธ.กสิกรไทย (KBANK) - 123-4-56789-0</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">การประเมินความเสี่ยง (Suitability Test)</span>
+                            <span class="info-value"
+                                style="color: var(--success); display: flex; align-items: center; gap: 8px;">
+                                ระดับ 4 (รับความเสี่ยงได้สูง)
+                                <span
+                                    style="font-size: 0.8rem; background: #e2e8f0; color: #475569; padding: 2px 6px; border-radius: 4px; cursor: pointer;">ทำแบบประเมินใหม่</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-section" id="dynamicReqSection">
+                    <h3 class="section-title" id="reqTitle">📝 เงื่อนไขเฉพาะบัญชี</h3>
+                    <!-- Dynamic content injected via JS -->
+                </div>
+
+                <div class="info-section">
+                    <h3 class="section-title">📎 แนบเอกสารเพิ่มเติม (ถ้ามี)</h3>
+                    <div class="upload-zone">
+                        <div class="upload-icon">📄</div>
+                        <div class="upload-text">ลากไฟล์มาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</div>
+                        <div class="upload-subtext">รองรับไฟล์ PDF, JPG, PNG ขนาดไม่เกิน 5MB (เช่น Statement ย้อนหลัง
+                            3-6 เดือน)</div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-outline" onclick="prevStep()">← ย้อนกลับ</button>
+                    <div class="actions-right">
+                        <button class="btn btn-primary" onclick="nextStep()">ดำเนินการต่อ ➔</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3 Content -->
+            <div class="step-content" id="step3">
+
+                <h3 class="section-title">📄 ข้อตกลงและเงื่อนไข</h3>
+                <div class="terms-box">
+                    <p><strong>ข้อตกลงและเงื่อนไขการเปิดบัญชีเพิ่มเติม</strong></p>
+                    <p>ข้าพเจ้าตกลงและยอมรับเงื่อนไขการให้บริการของบริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)
+                        ("บริษัท") โดยข้าพเจ้ายืนยันว่าข้อมูลที่ให้ไว้เป็นความจริงทุกประการ
+                        ข้าพเจ้ารับทราบและเข้าใจความเสี่ยงจากการลงทุนในหลักทรัพย์และ/หรือสัญญาซื้อขายล่วงหน้าเป็นอย่างดี...
+                    </p>
+                    <br>
+                    <p><strong>ความยินยอมในการเปิดเผยข้อมูล</strong></p>
+                    <p>ข้าพเจ้ายินยอมให้บริษัทเก็บรวบรวม ใช้ และเปิดเผยข้อมูลส่วนบุคคลของข้าพเจ้า
+                        เพื่อวัตถุประสงค์ในการพิจารณาอนุมัติเปิดบัญชี การให้บริการ
+                        และการปฏิบัติตามกฎหมายที่เกี่ยวข้อง...</p>
+                </div>
+
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="chkTerms" onchange="checkFormValid()">
+                        <span>ข้าพเจ้ายอมรับข้อตกลงและเงื่อนไขการเปิดบัญชีเพิ่มเติมที่ระบุไว้ข้างต้น</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="chkConsent" onchange="checkFormValid()">
+                        <span>ข้าพเจ้ายินยอมให้ใช้ข้อมูลที่มีอยู่ในระบบ เพื่อประกอบการพิจารณาอนุมัติเปิดบัญชี</span>
+                    </label>
+                </div>
+
+                <div class="auth-panel">
+                    <h4 style="margin-bottom: 8px;">ยืนยันการทำรายการด้วยรหัส PIN</h4>
+                    <p style="font-size: 0.9rem; color: var(--text-muted);">กรุณาระบุรหัส PIN 6
+                        หลักของคุณเพื่อยืนยันคำขอ</p>
+
+                    <div class="pin-inputs">
+                        <input type="password" class="pin-input" maxlength="1" onkeyup="moveToNext(this, event)">
+                        <input type="password" class="pin-input" maxlength="1" onkeyup="moveToNext(this, event)">
+                        <input type="password" class="pin-input" maxlength="1" onkeyup="moveToNext(this, event)">
+                        <input type="password" class="pin-input" maxlength="1" onkeyup="moveToNext(this, event)">
+                        <input type="password" class="pin-input" maxlength="1" onkeyup="moveToNext(this, event)">
+                        <input type="password" class="pin-input" maxlength="1" onkeyup="moveToNext(this, event)">
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-outline" onclick="prevStep()">← ย้อนกลับ</button>
+                    <div class="actions-right">
+                        <button class="btn btn-primary" id="btnSubmit" onclick="submitRequest()"
+                            disabled>ยืนยันการส่งคำขอ ✓</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4 Success Content -->
+            <div class="step-content" id="step4">
+                <div class="success-content">
+                    <div class="success-icon">✓</div>
+                    <h2 class="success-title">ส่งคำขอเปิดบัญชีเรียบร้อยแล้ว</h2>
+                    <p class="success-subtitle">ระบบได้รับข้อมูลของท่านแล้ว
+                        เจ้าหน้าที่จะดำเนินการตรวจสอบและแจ้งผลให้ทราบเร็วๆ นี้</p>
+
+                    <div class="receipt-card">
+                        <div class="receipt-row">
+                            <span class="receipt-label">เลขที่รายการ (Transaction No.)</span>
+                            <span class="receipt-value">20260724-8891</span>
+                        </div>
+                        <div class="receipt-row">
+                            <span class="receipt-label">ประเภทบัญชีที่ขอเปิด</span>
+                            <span class="receipt-value" id="receiptAccount">TFEX</span>
+                        </div>
+                        <div class="receipt-row">
+                            <span class="receipt-label">วันที่ส่งคำขอ</span>
+                            <span class="receipt-value">24 ก.ค. 2026, 08:20 น.</span>
+                        </div>
+                        <div class="receipt-row">
+                            <span class="receipt-label">สถานะ</span>
+                            <span class="receipt-value" style="color: #d97706;">⏳ อยู่ระหว่างการตรวจสอบ</span>
+                        </div>
+                    </div>
+
+                    <div class="actions-center">
+                        <button class="btn btn-outline">พิมพ์เอกสาร</button>
+                        <button class="btn btn-primary" onclick="location.reload()">กลับหน้าหลัก</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let selectedAccountType = '';
+
+        function updateStepper() {
+            // Update progress line
+            const progress = document.getElementById('stepperProgress');
+            if (currentStep === 1) progress.style.width = '0%';
+            else if (currentStep === 2) progress.style.width = '50%';
+            else if (currentStep >= 3) progress.style.width = '100%';
+
+            // Update circles
+            document.querySelectorAll('.step').forEach(step => {
+                const stepNum = parseInt(step.getAttribute('data-step'));
+                step.classList.remove('active', 'completed');
+
+                if (stepNum === currentStep) {
+                    step.classList.add('active');
+                } else if (stepNum < currentStep) {
+                    step.classList.add('completed');
+                }
+            });
+
+            // Hide Stepper on Success
+            if (currentStep === 4) {
+                document.getElementById('stepper').style.display = 'none';
+                document.getElementById('pageHeader').style.display = 'none';
+            }
+        }
+
+        function showStepContent() {
+            document.querySelectorAll('.step-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`step${currentStep}`).classList.add('active');
+        }
+
+        function nextStep() {
+            if (currentStep === 1 && !selectedAccountType) return;
+            
+            if (currentStep === 1) {
+                buildDynamicForm();
+            }
+
+            if (currentStep < 4) {
+                currentStep++;
+                updateStepper();
+                showStepContent();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateStepper();
+                showStepContent();
+            }
+        }
+
+        function selectAccount(element, type) {
+            if(element.classList.contains('disabled')) return;
+
+            // Remove selected from all
+            document.querySelectorAll('.account-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // Add selected to clicked
+            element.classList.add('selected');
+            selectedAccountType = type;
+            
+            // Enable next button
+            document.getElementById('btnNext1').disabled = false;
+        }
+
+        function buildDynamicForm() {
+            const container = document.getElementById('dynamicReqSection');
+            let html = '';
+            
+            if(selectedAccountType === 'TFEX') {
+                html = `
+                    <h3 class="section-title">📝 เงื่อนไขเฉพาะบัญชี TFEX</h3>
+                    <div class="form-group">
+                        <label class="form-label">ประเภทการส่งคำสั่งซื้อขาย</label>
+                        <select class="form-select">
+                            <option>ส่งคำสั่งซื้อขายด้วยตนเองผ่านระบบ Internet (Online)</option>
+                            <option>ส่งคำสั่งผ่านผู้ติดต่อกับผู้ลงทุน (Marketing)</option>
+                        </select>
+                    </div>
+                `;
+            } else if (selectedAccountType === 'Global Trade') {
+                html = `
+                    <h3 class="section-title">📝 เงื่อนไขเฉพาะบัญชี Global Trade</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label" style="margin-bottom: 12px; background: #fffbeb; padding: 12px; border-radius: 6px; border: 1px solid #fde68a;">
+                            <input type="checkbox" checked>
+                            <span style="color: #92400e;">ข้าพเจ้ารับทราบความเสี่ยงด้านอัตราแลกเปลี่ยน (FX Risk) จากการลงทุนในหลักทรัพย์ต่างประเทศ</span>
+                        </label>
+                        <label class="checkbox-label" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+                            <input type="checkbox" checked>
+                            <span>ข้าพเจ้ายืนยันแบบฟอร์ม W-8BEN เพื่อใช้สำหรับการหักภาษี ณ ที่จ่ายตามกฎหมายของประเทศสหรัฐอเมริกา</span>
+                        </label>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        function checkFormValid() {
+            const terms = document.getElementById('chkTerms').checked;
+            const consent = document.getElementById('chkConsent').checked;
+            const btn = document.getElementById('btnSubmit');
+            
+            // In reality, we'd also check PIN completeness
+            btn.disabled = !(terms && consent);
+        }
+
+        function moveToNext(current, event) {
+            // Auto move to next input for PIN
+            if (current.value.length >= current.maxLength) {
+                let next = current.nextElementSibling;
+                if (next) next.focus();
+            }
+            if (event.key === 'Backspace') {
+                let prev = current.previousElementSibling;
+                if (prev) prev.focus();
+            }
+        }
+
+        function submitRequest() {
+            document.getElementById('receiptAccount').innerText = selectedAccountType;
+            currentStep = 4;
+            updateStepper();
+            showStepContent();
+        }
+    </script>
+</body>
+
+</html>

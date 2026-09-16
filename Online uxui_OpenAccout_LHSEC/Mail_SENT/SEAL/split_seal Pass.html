@@ -1,0 +1,2200 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Confirmation Splitter & Mail Dispatcher - แยกไฟล์ PDF & ส่งอีเมลลูกค้า</title>
+    <meta name="description" content="เครื่องมือแยกไฟล์ PDF Confirmation ตามเลขที่บัญชี เข้ารหัสผ่าน และดึงข้อมูลลูกค้าจาก SQLite / Excel เพื่อตรวจสอบและส่งอีเมลอัตโนมัติ">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- PDF.js for text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- pdf-lib for splitting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <!-- JSZip for batch download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- SheetJS for Excel generation and parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- sql.js (WebAssembly SQLite) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+
+    <!-- PDF Encryption -->
+    <script type="module">
+        import { encryptPDF } from 'https://esm.sh/@pdfsmaller/pdf-encrypt';
+        window.encryptPDF = encryptPDF;
+    </script>
+
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1e2642;
+            --border-color: rgba(99, 102, 241, 0.2);
+            --border-hover: rgba(99, 102, 241, 0.5);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-primary: #6366f1;
+            --accent-secondary: #8b5cf6;
+            --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+            --success: #10b981;
+            --success-bg: rgba(16, 185, 129, 0.12);
+            --warning: #f59e0b;
+            --warning-bg: rgba(245, 158, 11, 0.12);
+            --danger: #ef4444;
+            --danger-bg: rgba(239, 68, 68, 0.12);
+            --info: #38bdf8;
+            --info-bg: rgba(56, 189, 248, 0.12);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.18);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.5;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 15% 15%, rgba(99, 102, 241, 0.1) 0%, transparent 45%),
+                radial-gradient(ellipse at 85% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 45%),
+                radial-gradient(ellipse at 50% 50%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1480px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        .app-header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding: 24px 0 10px;
+        }
+
+        .badge-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid var(--border-color);
+            color: #a5b4fc;
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+        }
+
+        .app-header h1 {
+            font-size: 2.3rem;
+            font-weight: 800;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .app-header p {
+            font-size: 1.05rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+
+        /* Glass Card */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: var(--shadow-md);
+            backdrop-filter: blur(12px);
+            margin-bottom: 24px;
+            transition: var(--transition);
+        }
+
+        .glass-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        /* Section Title */
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: rgba(26, 32, 53, 0.5);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.dragover {
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-glow);
+            background: rgba(99, 102, 241, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .upload-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-primary);
+        }
+
+        .upload-icon svg {
+            width: 30px;
+            height: 30px;
+        }
+
+        .upload-zone h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .upload-zone p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* File Info Banner */
+        .file-info {
+            display: none;
+            margin: 0 0 24px;
+            padding: 16px 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .file-info.visible {
+            display: flex;
+            animation: slideDown 0.3s ease;
+        }
+
+        .file-info-details {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-info-name {
+            font-weight: 700;
+            color: #a5b4fc;
+            font-size: 1rem;
+        }
+
+        .file-info-meta {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 9px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: var(--transition);
+            text-decoration: none;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-success:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #ffffff;
+        }
+
+        .btn-secondary,
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover,
+        .btn-outline:hover {
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-email {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+        }
+
+        .btn-email:hover {
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 0.8rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Progress Section */
+        .progress-section {
+            display: none;
+            margin: 20px 0 24px;
+        }
+
+        .progress-bar-container {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            padding: 20px 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .progress-label {
+            font-weight: 600;
+            font-size: 0.92rem;
+        }
+
+        .progress-percent {
+            color: var(--accent-primary);
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+
+        .progress-track {
+            height: 8px;
+            background: rgba(99, 102, 241, 0.12);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-status {
+            margin-top: 8px;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+        }
+
+        /* Database & Excel Ingestion Cards */
+        .ingest-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .ingest-box {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .ingest-box:hover {
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.06);
+        }
+
+        .ingest-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: rgba(99, 102, 241, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-primary);
+            flex-shrink: 0;
+        }
+
+        .ingest-info h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .ingest-info p {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(17, 24, 39, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* 8-Column Data Table */
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            margin-bottom: 20px;
+        }
+
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.86rem;
+            text-align: left;
+        }
+
+        table.data-table thead {
+            background: #131d36;
+            border-bottom: 2px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        table.data-table th {
+            padding: 12px 14px;
+            font-weight: 600;
+            color: #c7d2fe;
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+        }
+
+        table.data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        table.data-table tbody tr:hover {
+            background: var(--bg-card-hover);
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: 9999px;
+            font-size: 0.76rem;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            background: rgba(148, 163, 184, 0.15);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .status-success {
+            background: var(--success-bg);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-failed {
+            background: var(--danger-bg);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .status-warning {
+            background: var(--warning-bg);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        /* Pages Grid */
+        .pages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .page-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .page-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
+
+        .page-card-header {
+            padding: 10px 14px;
+            background: rgba(17, 24, 39, 0.8);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page-number {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .page-badge {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: white;
+            font-weight: 700;
+        }
+
+        .page-card-body {
+            padding: 12px;
+        }
+
+        .page-canvas-container {
+            width: 100%;
+            height: 160px;
+            background: #000;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .page-canvas-container canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .code-input {
+            width: 100%;
+            padding: 7px 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Inter', monospace;
+            font-size: 0.85rem;
+        }
+
+        .code-input.detected {
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        /* Group List */
+        .group-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 14px 18px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .group-pages {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+
+        .group-page-tag {
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(6px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 760px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 26px;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .btn-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .btn-close:hover {
+            color: var(--text-primary);
+        }
+
+        .mail-preview-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            color: var(--text-primary);
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        /* Animations */
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 500;
+            box-shadow: var(--shadow-lg);
+            animation: slideInRight 0.3s ease;
+        }
+
+        .toast.success {
+            background: #059669;
+            color: white;
+        }
+
+        .toast.error {
+            background: #dc2626;
+            color: white;
+        }
+
+        .toast.warning {
+            background: #d97706;
+            color: white;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Code input section */
+        .code-input-section,
+        .group-summary-section,
+        .dispatcher-section {
+            display: none;
+            margin: 24px 0;
+        }
+
+        .code-input-section.visible,
+        .group-summary-section.visible,
+        .dispatcher-section.visible {
+            display: block;
+            animation: slideDown 0.4s ease;
+        }
+
+        /* Status */
+        .status-message {
+            display: none;
+            padding: 14px 20px;
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .status-message.visible {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-message.success {
+            background: var(--success-bg);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-message.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Log console */
+        .log-console {
+            background: #090d16;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            font-family: monospace;
+            font-size: 0.78rem;
+            color: #94a3b8;
+            height: 110px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .log-entry {
+            margin-bottom: 3px;
+        }
+
+        .log-entry.success {
+            color: #34d399;
+        }
+
+        .log-entry.error {
+            color: #f87171;
+        }
+
+        .log-entry.info {
+            color: #38bdf8;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="badge-tag">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+                PDF Confirmation Splitter & Mail Dispatcher
+            </div>
+            <h1>แยกไฟล์ PDF & จัดการส่งอีเมลลูกค้า</h1>
+            <p>แยกไฟล์ PDF Confirmation ตามเลขที่บัญชี เข้ารหัสผ่าน และดึงข้อมูลลูกค้าจาก SQLite / Excel เพื่อตรวจสอบและส่งอีเมลอัตโนมัติ</p>
+        </header>
+
+        <!-- Step 1: Upload Main PDF -->
+        <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+            </div>
+            <h3>1. ลากไฟล์ PDF Confirmation มาวางที่นี่</h3>
+            <p>หรือคลิกเพื่อเลือกไฟล์ • ระบบจะแยกหน้าตามเลขที่บัญชีอัตโนมัติ</p>
+            <input type="file" id="fileInput" accept=".pdf">
+        </div>
+
+        <!-- File Info -->
+        <div class="file-info" id="fileInfo">
+            <div class="file-info-details">
+                <div class="file-info-name" id="fileName">—</div>
+                <div class="file-info-meta" id="fileMeta">—</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-sm btn-secondary" onclick="resetApp()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    เริ่มใหม่
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-section" id="progressSection">
+            <div class="progress-bar-container">
+                <div class="progress-header">
+                    <span class="progress-label">⚙️ กำลังประมวลผล PDF...</span>
+                    <span class="progress-percent" id="progressPercent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-status" id="progressStatus">กำลังอ่านไฟล์...</div>
+            </div>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="statusMessage"></div>
+
+        <!-- Step 2: Database / Excel Ingestion -->
+        <div class="glass-card" id="ingestSection">
+            <div class="section-title">
+                <span>🗄️ 2. เชื่อมต่อฐานข้อมูลลูกค้า (SQLite Database หรือ Excel Table)</span>
+            </div>
+            
+            <div class="ingest-grid">
+                <!-- SQLite Box -->
+                <div class="ingest-box" onclick="document.getElementById('dbFileInput').click()">
+                    <input type="file" id="dbFileInput" accept=".db,.sqlite,.sqlite3" style="display:none" onchange="handleDbFileUpload(event)">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="ingest-icon">💾</div>
+                        <div class="ingest-info">
+                            <h4>SQLite Database (.db / .sqlite)</h4>
+                            <p id="sqliteStatusText">คลิกเพื่อโหลดไฟล์ SQLite เพื่อดึงข้อมูลลูกค้า</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline">เลือกไฟล์</button>
+                </div>
+
+                <!-- Excel Box -->
+                <div class="ingest-box" onclick="document.getElementById('excelFileInput').click()">
+                    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelFileUpload(event)">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="ingest-icon">📊</div>
+                        <div class="ingest-info">
+                            <h4>Excel Table (.xlsx / .csv)</h4>
+                            <p id="excelStatusText">คลิกเพื่อโหลดตารางข้อมูลลูกค้าที่มี AccountNo</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline">เลือกไฟล์</button>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.84rem; color: var(--text-secondary);">ทดสอบทันที:</span>
+                    <button class="btn btn-outline btn-sm" onclick="loadSampleDemoDatabase()">
+                        ⚡ โหลดฐานข้อมูลตัวอย่าง (Sample Database)
+                    </button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 0.84rem; color: var(--text-secondary);" id="matchSummaryText"></span>
+                    <button class="btn btn-primary btn-sm" id="btnRematch" onclick="matchAllCustomerData()">
+                        🔄 แมตช์ข้อมูลลูกค้าใหม่ (Rematch)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Customer Details Table (8 Columns as specified) & Email Dispatcher -->
+        <div class="dispatcher-section" id="dispatcherSection">
+            <div class="glass-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                    <div class="section-title" style="margin-bottom: 0;">
+                        <span>📋 ตารางข้อมูลลูกค้า & สถานะการส่ง (8 คอลัมน์)</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-success btn-sm" id="btnStartAutomate" onclick="startAutomatedSending()">
+                            ⚡ เริ่มส่งอัตโนมัติ (Automate Send)
+                        </button>
+                        <button class="btn btn-outline btn-sm" onclick="exportResultExcel()">
+                            📥 Export Excel พร้อมสถานะ
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Summary Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div>
+                            <div class="stat-label">บัญชีทั้งหมด</div>
+                            <div class="stat-value" id="statTotal">0</div>
+                        </div>
+                        <span>📁</span>
+                    </div>
+                    <div class="stat-card">
+                        <div>
+                            <div class="stat-label">รอดำเนินการ</div>
+                            <div class="stat-value" style="color: #cbd5e1;" id="statPending">0</div>
+                        </div>
+                        <span>⏳</span>
+                    </div>
+                    <div class="stat-card">
+                        <div>
+                            <div class="stat-label">ส่งสำเร็จ</div>
+                            <div class="stat-value" style="color: var(--success);" id="statSuccess">0</div>
+                        </div>
+                        <span>✅</span>
+                    </div>
+                    <div class="stat-card">
+                        <div>
+                            <div class="stat-label">ส่งล้มเหลว</div>
+                            <div class="stat-value" style="color: var(--danger);" id="statFailed">0</div>
+                        </div>
+                        <span>❌</span>
+                    </div>
+                    <div class="stat-card">
+                        <div>
+                            <div class="stat-label">ไม่มีอีเมล</div>
+                            <div class="stat-value" style="color: var(--warning);" id="statNoEmail">0</div>
+                        </div>
+                        <span>⚠️</span>
+                    </div>
+                </div>
+
+                <!-- Automation Progress Box -->
+                <div id="automationBox" style="display: none; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600; color: #a5b4fc;" id="autoStatusText">กำลังดำเนินการส่งอัตโนมัติ...</span>
+                        <span style="font-weight: 700;" id="autoPercentText">0%</span>
+                    </div>
+                    <div class="progress-track" style="margin: 8px 0;">
+                        <div class="progress-fill" id="autoProgressBar"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);" id="autoCounterText">ส่งแล้ว: 0 / 0</span>
+                        <button class="btn btn-warning btn-sm" onclick="stopAutomatedSending()">⛔ หยุดชั่วคราว</button>
+                    </div>
+                    <div class="log-console" id="autoLogConsole"></div>
+                </div>
+
+                <!-- Search & Filters -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                    <input type="text" id="tableSearchInput" placeholder="🔍 ค้นหา AccountNo, CustomerID, ชื่อลูกค้า, อีเมล..." oninput="renderCustomerTable()" style="flex: 1; min-width: 240px; padding: 7px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary);">
+                    <select id="tableStatusFilter" onchange="renderCustomerTable()" style="padding: 7px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary);">
+                        <option value="all">สถานะทั้งหมด</option>
+                        <option value="pending">รอดำเนินการ (Pending)</option>
+                        <option value="success">ส่งสำเร็จ (Success)</option>
+                        <option value="failed">ส่งล้มเหลว (Failed)</option>
+                        <option value="no_email">ไม่มีอีเมล (No Email)</option>
+                    </select>
+                </div>
+
+                <!-- The 8-Column Table -->
+                <div class="table-wrapper">
+                    <table class="data-table" id="customerDataTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 36px; text-align: center;">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)">
+                                </th>
+                                <th>AccountNo</th>
+                                <th>CustomerID</th>
+                                <th>AccountName</th>
+                                <th>MailingMethod</th>
+                                <th>EmailAddress</th>
+                                <th>CustomerMobile</th>
+                                <th>AppliedBranch</th>
+                                <th style="text-align: center;">สถานะการส่ง</th>
+                                <th style="text-align: center;">การดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerTableBody">
+                            <tr>
+                                <td colspan="10" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                                    ยังไม่มีข้อมูล กรุณาอัปโหลดไฟล์ PDF และฐานข้อมูลลูกค้า
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mail Template Settings in Expandable Card -->
+                <div style="background: rgba(17, 24, 39, 0.5); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px 18px;">
+                    <label style="font-weight: 600; font-size: 0.88rem; display: block; margin-bottom: 6px;">📝 หัวข้ออีเมล (Subject Template):</label>
+                    <input type="text" id="mailSubjectTemplate" value="Confirmation รายการซื้อขายหลักทรัพย์ เลขที่ {AccountNo}" style="width: 100%; padding: 8px 12px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); margin-bottom: 10px;">
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">
+                        ตัวแปรที่ใช้ได้: <code>{AccountNo}</code>, <code>{CustomerID}</code>, <code>{AccountName}</code>, <code>{AppliedBranch}</code>, <code>{CustomerMobile}</code>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Download & Batch Options Section -->
+        <div class="download-section glass-card" id="downloadSection" style="display: none;">
+            <div class="section-title">
+                <span>🔒 ตัวเลือกการเข้ารหัสไฟล์ PDF & ดาวน์โหลด</span>
+            </div>
+            <div style="margin-bottom: 16px; background: rgba(99, 102, 241, 0.08); border: 1px solid var(--border-color); padding: 14px 18px; border-radius: var(--radius-sm);">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500; margin-bottom: 10px;">
+                    <input type="checkbox" id="encryptPdfCheckbox" checked style="width: 18px; height: 18px; accent-color: var(--accent-primary);" onchange="document.getElementById('encryptOptions').style.display = this.checked ? 'block' : 'none'">
+                    🔒 เข้ารหัสไฟล์ PDF (ตั้งรหัสผ่านก่อนเปิดไฟล์)
+                </label>
+                <div id="encryptOptions" style="padding-left: 26px;">
+                    <label style="font-size: 0.84rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">รูปแบบรหัสผ่าน:</label>
+                    <input type="text" id="encryptPasswordPattern" value="{account}" style="max-width: 300px; padding: 6px 12px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary);">
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                        ใส่ <code>{account}</code> เพื่อแทนที่ด้วยเลขที่บัญชี หรือใช้วันเดือนปีเกิดลูกค้า
+                    </p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="btn btn-success" onclick="downloadAllAsZip()" id="btnDownloadZip">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ดาวน์โหลด PDF ทั้งหมด (ZIP)
+                </button>
+                <button class="btn btn-primary" onclick="downloadAllSeparately()" id="btnDownloadSep">
+                    ดาวน์โหลดแยกทีละไฟล์
+                </button>
+            </div>
+        </div>
+
+        <!-- Page Verification & Group Summary -->
+        <div class="code-input-section" id="codeInputSection">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <h2 class="section-title" style="margin-bottom: 0;">📄 ตรวจสอบเลขที่บัญชีแต่ละหน้าของ PDF</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-sm btn-primary" onclick="buildGroups()">🔄 ปรับปรุงการจัดกลุ่ม</button>
+                </div>
+            </div>
+            <div class="pages-grid" id="pagesGrid"></div>
+        </div>
+
+        <!-- Group Summary Section -->
+        <div class="group-summary-section" id="groupSummarySection">
+            <h2 class="section-title">📦 สรุปการรวมไฟล์ตามเลขที่บัญชี</h2>
+            <div id="groupList"></div>
+        </div>
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toastContainer"></div>
+
+    </div>
+
+    <!-- Modal for Manual Review Mode -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🔍 ตรวจสอบข้อมูลก่อนส่งอีเมล (Manual Review)</div>
+                <button class="btn-close" onclick="closeReviewModal()">&times;</button>
+            </div>
+            <div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                    <div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">AccountNo:</span>
+                        <div id="modalAccountNo" style="font-weight: 700; font-size: 1.05rem; color: #a5b4fc;">-</div>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">ชื่อลูกค้า (AccountName):</span>
+                        <div id="modalAccountName" style="font-weight: 600;">-</div>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">CustomerID:</span>
+                        <div id="modalCustomerID">-</div>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">สาขา (Branch):</span>
+                        <div id="modalBranch">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">ส่งไปยังอีเมล (To):</label>
+                    <input type="text" id="modalEmail" style="width: 100%; padding: 8px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary);">
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">หัวข้ออีเมล (Subject):</label>
+                    <input type="text" id="modalSubject" style="width: 100%; padding: 8px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary);">
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">ตัวอย่างข้อความในอีเมล (Preview):</label>
+                    <div class="mail-preview-box" id="modalBodyPreview"></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 16px; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-outline btn-sm" onclick="navigateModal(-1)">◀ ก่อนหน้า</button>
+                        <button class="btn btn-outline btn-sm" onclick="navigateModal(1)">ถัดไป ▶</button>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="downloadModalPdf()">📥 โหลด PDF บัญชีนี้</button>
+                        <button class="btn btn-success" onclick="confirmSendSingle()">
+                            📧 เปิดใน Outlook & บันทึกว่าส่งแล้ว
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // Setup PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // App Global State
+        let SQL = null;
+        let sqliteDb = null;
+        let rawExcelRecords = [];
+        let pdfBytes = null;
+        let pdfDoc = null;
+        let pageTexts = [];
+        let pageCount = 0;
+        let detectedAccounts = [];
+        let accountGroups = {};
+        let originalFileName = '';
+        let customerDataList = []; // The unified 8-column records
+        let currentReviewIndex = -1;
+        let isAutomating = false;
+        let automationCancelled = false;
+
+        // Initialize SQL.js
+        async function initSqlJsEngine() {
+            try {
+                SQL = await initSqlJs({
+                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+                });
+                console.log("SQL.js ready.");
+            } catch (err) {
+                console.error("SQL.js init error:", err);
+            }
+        }
+        initSqlJsEngine();
+
+        // PDF Upload handlers
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileMeta = document.getElementById('fileMeta');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressStatus = document.getElementById('progressStatus');
+        const statusMessage = document.getElementById('statusMessage');
+        const codeInputSection = document.getElementById('codeInputSection');
+        const pagesGrid = document.getElementById('pagesGrid');
+        const downloadSection = document.getElementById('downloadSection');
+        const groupSummarySection = document.getElementById('groupSummarySection');
+        const groupList = document.getElementById('groupList');
+        const dispatcherSection = document.getElementById('dispatcherSection');
+
+        uploadZone.addEventListener('click', (e) => { if (e.target !== fileInput) fileInput.click(); });
+        uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') handleFile(files[0]);
+        });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+
+        async function handleFile(file) {
+            originalFileName = file.name.replace('.pdf', '');
+            fileName.textContent = file.name;
+            fileMeta.textContent = `ขนาด: ${formatFileSize(file.size)}`;
+            fileInfo.classList.add('visible');
+            progressSection.style.display = 'block';
+            updateProgress(10, 'กำลังอ่านไฟล์ PDF...');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                pdfBytes = new Uint8Array(arrayBuffer);
+                updateProgress(25, 'กำลังวิเคราะห์โครงสร้างหน้าเอกสาร...');
+
+                pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+                pageCount = pdfDoc.numPages;
+                fileMeta.textContent = `ขนาด: ${formatFileSize(file.size)} • จำนวนหน้า: ${pageCount} หน้า`;
+                updateProgress(35, `กำลังอ่านข้อความจาก ${pageCount} หน้า...`);
+
+                pageTexts = [];
+                for (let i = 1; i <= pageCount; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const text = textContent.items.map(item => item.str).join(' ');
+                    pageTexts.push(text);
+                    updateProgress(35 + Math.round((i / pageCount) * 50), `อ่านหน้า ${i}/${pageCount}...`);
+                }
+
+                updateProgress(90, 'กำลังตรวจจับเลขที่บัญชี...');
+                detectedAccounts = pageTexts.map((text, idx) => detectAccountNumber(text, idx));
+                updateProgress(100, 'เสร็จสิ้น!');
+
+                setTimeout(() => {
+                    progressSection.style.display = 'none';
+                    renderPages();
+                    buildGroups();
+                    showStatus('success', `✅ อ่านไฟล์สำเร็จ! พบ ${pageCount} หน้า และจัดกลุ่มเรียบร้อย`);
+                }, 500);
+
+            } catch (error) {
+                console.error('Error processing PDF:', error);
+                showStatus('error', `❌ เกิดข้อผิดพลาด: ${error.message}`);
+                progressSection.style.display = 'none';
+            }
+        }
+
+        // Detect Account Number in text
+        function detectAccountNumber(text, pageIndex) {
+            const custPatterns = [
+                /เลขที่บัญชี\s*(?:Cust\.?\s*No\.?)?\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/i,
+                /Cust\.?\s*No\.?\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/i,
+                /Customer\s*(?:No\.?|Number|#|Code)?\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/i,
+                /เลขที่บัญชี\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/,
+                /Account\s*(?:No\.?|Number|#)\s*[:：]?\s*([A-Za-z0-9][\w\-]+[A-Za-z0-9])/i
+            ];
+
+            for (const pat of custPatterns) {
+                const m = text.match(pat);
+                if (m) return { code: m[1].trim(), auto: true, confidence: 'high' };
+            }
+
+            // Fallback to long digits
+            const numberMatches = [...text.matchAll(/\b(\d{7,12})\b/g)];
+            if (numberMatches.length > 0) {
+                return { code: numberMatches[0][1], auto: true, confidence: 'medium' };
+            }
+
+            return { code: `PAGE_${pageIndex + 1}`, auto: false, confidence: 'none' };
+        }
+
+        function extractDateFromFileName(name) {
+            const match = name.match(/(\d{2})(\d{2})(\d{4})/);
+            if (match) return `${match[1]}${match[2]}${match[3]}`;
+            const now = new Date();
+            return `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+        }
+
+        async function renderPages() {
+            pagesGrid.innerHTML = '';
+            const dateStr = extractDateFromFileName(originalFileName);
+
+            for (let i = 0; i < pageCount; i++) {
+                const card = document.createElement('div');
+                card.className = 'page-card';
+                const detected = detectedAccounts[i];
+                const code = detected.code;
+                const previewText = pageTexts[i].substring(0, 300) + (pageTexts[i].length > 300 ? '...' : '');
+
+                card.innerHTML = `
+                    <div class="page-card-header">
+                        <div class="page-number">
+                            <div class="page-badge">${i + 1}</div>
+                            <span>หน้าที่ ${i + 1}</span>
+                        </div>
+                    </div>
+                    <div class="page-card-body">
+                        <div class="page-canvas-container" id="canvasContainer_${i}">
+                            <canvas id="pageCanvas_${i}"></canvas>
+                        </div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);height:40px;overflow:hidden;margin-bottom:8px;">${escapeHtml(previewText)}</div>
+                        <div>
+                            <label style="font-size:0.78rem;color:var(--text-secondary);display:block;margin-bottom:4px;">เลขที่บัญชี:</label>
+                            <input type="text" class="code-input ${detected.auto ? 'detected' : ''}" 
+                                   id="codeInput_${i}" value="${escapeHtml(code)}" 
+                                   oninput="buildGroups()">
+                        </div>
+                    </div>
+                `;
+
+                pagesGrid.appendChild(card);
+                renderPageThumbnail(i);
+            }
+
+            codeInputSection.classList.add('visible');
+            downloadSection.style.display = 'block';
+        }
+
+        async function renderPageThumbnail(pageIndex) {
+            try {
+                const page = await pdfDoc.getPage(pageIndex + 1);
+                const viewport = page.getViewport({ scale: 0.4 });
+                const canvas = document.getElementById(`pageCanvas_${pageIndex}`);
+                if (!canvas) return;
+                const context = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+            } catch (e) {
+                console.error(`Thumbnail error p.${pageIndex + 1}:`, e);
+            }
+        }
+
+        // Build groups from per-page account numbers
+        function buildGroups() {
+            accountGroups = {};
+            const dateStr = extractDateFromFileName(originalFileName);
+
+            for (let i = 0; i < pageCount; i++) {
+                const acct = (document.getElementById(`codeInput_${i}`)?.value || detectedAccounts[i]?.code || `PAGE_${i + 1}`).trim();
+                if (!accountGroups[acct]) accountGroups[acct] = [];
+                accountGroups[acct].push(i);
+            }
+
+            // Summary list
+            groupList.innerHTML = '';
+            const accounts = Object.keys(accountGroups);
+
+            for (let g = 0; g < accounts.length; g++) {
+                const acct = accounts[g];
+                const pages = accountGroups[acct];
+                const fname = `${acct}_${dateStr}.pdf`;
+
+                const card = document.createElement('div');
+                card.className = 'group-card';
+                card.innerHTML = `
+                    <div>
+                        <strong style="color:#a5b4fc;font-size:0.95rem;">${escapeHtml(acct)}</strong>
+                        <span style="font-size:0.8rem;color:var(--text-muted);margin-left:8px;">${pages.length} หน้า (${fname})</span>
+                        <div class="group-pages">
+                            ${pages.map(p => `<span class="group-page-tag">หน้า ${p + 1}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-sm btn-secondary" onclick="downloadGroup('${escapeHtml(acct)}')">📥 โหลด PDF</button>
+                    </div>
+                `;
+                groupList.appendChild(card);
+            }
+
+            groupSummarySection.classList.add('visible');
+
+            // Trigger matching with DB / Excel
+            matchAllCustomerData();
+        }
+
+        // ==================== SQLITE & EXCEL INGESTION ====================
+
+        async function handleDbFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!SQL) await initSqlJsEngine();
+
+            const reader = new FileReader();
+            reader.onload = function () {
+                try {
+                    const uInt8Array = new Uint8Array(this.result);
+                    sqliteDb = new SQL.Database(uInt8Array);
+                    document.getElementById('sqliteStatusText').innerHTML = `
+                        <span style="color:var(--success);font-weight:600;">✓ โหลด DB: ${file.name}</span>
+                    `;
+                    showToast('success', `💾 โหลด SQLite สำเร็จ (${(file.size / 1024).toFixed(1)} KB)`);
+                    matchAllCustomerData();
+                } catch (err) {
+                    showToast('error', `❌ ไม่สามารถอ่านไฟล์ SQLite: ${err.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function handleExcelFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    rawExcelRecords = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+
+                    document.getElementById('excelStatusText').innerHTML = `
+                        <span style="color:var(--success);font-weight:600;">✓ โหลด Excel: ${file.name} (${rawExcelRecords.length} แถว)</span>
+                    `;
+                    showToast('success', `📊 โหลด Excel สำเร็จ (${rawExcelRecords.length} รายการ)`);
+                    matchAllCustomerData();
+                } catch (err) {
+                    showToast('error', `❌ เกิดข้อผิดพลาดในการอ่าน Excel`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Load Sample SQLite Database for instant testing
+        async function loadSampleDemoDatabase() {
+            if (!SQL) await initSqlJsEngine();
+
+            sqliteDb = new SQL.Database();
+            sqliteDb.run(`
+                CREATE TABLE customers (
+                    AccountNo TEXT PRIMARY KEY,
+                    CustomerID TEXT,
+                    AccountName TEXT,
+                    MailingMethod TEXT,
+                    EmailAddress TEXT,
+                    CustomerMobile TEXT,
+                    AppliedBranch TEXT
+                );
+            `);
+
+            sqliteDb.run(`
+                INSERT INTO customers VALUES 
+                ('001-09821-4', 'CUS-10029', 'สมชาย มั่นคง', 'E-Document', 'somchai.m@example.com', '081-234-5678', 'สำนักงานใหญ่'),
+                ('001-09822-2', 'CUS-10030', 'วิภาดา รุ่งเรือง', 'E-Document', 'wipada.r@example.com', '089-876-5432', 'สาขาสีลม'),
+                ('001-09823-0', 'CUS-10031', 'กิตติศักดิ์ เจริญพร', 'Post Mail', 'kittisak.c@example.com', '086-555-1234', 'สาขาอโศก'),
+                ('001-09824-9', 'CUS-10032', 'ประภาส ชัยชนะ', 'E-Document', '', '083-444-9988', 'สาขาปิ่นเกล้า'),
+                ('001-09825-7', 'CUS-10033', 'ณภัทร สุขสมบัติ', 'E-Document', 'naphat.s@example.com', '092-111-2233', 'สาขาบางนา'),
+                ('001-09826-5', 'CUS-10034', 'อรทัย ปรีชา', 'E-Document', 'orathai.p@example.com', '084-777-6655', 'สำนักงานใหญ่');
+            `);
+
+            document.getElementById('sqliteStatusText').innerHTML = `
+                <span style="color:var(--success);font-weight:600;">✓ โหลด DB ตัวอย่าง (6 ลูกค้า)</span>
+            `;
+            showToast('success', '⚡ โหลดฐานข้อมูลตัวอย่างสำเร็จ!');
+            matchAllCustomerData();
+        }
+
+        // Auto-fix Thai character encoding (TIS-620 / Windows-874 misread as Windows-1252/Latin-1)
+        function fixThaiEncoding(text) {
+            if (!text || typeof text !== 'string') return text || '';
+
+            // Check if string contains typical Windows-874 misread characters (0xA1..0xFB) or pattern 'Ò
+            let hasMisread = false;
+            if (text.includes("'Ò§") || text.includes("'ÒÂ") || text.includes("'Ò§ÊÒÇ")) {
+                hasMisread = true;
+            } else {
+                for (let i = 0; i < text.length; i++) {
+                    const code = text.charCodeAt(i);
+                    if (code >= 0xA1 && code <= 0xFB) {
+                        hasMisread = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasMisread) return text.trim();
+
+            let res = '';
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                
+                // Handle leading ' before Thai titles
+                if (code === 0x27) { // Single quote '
+                    if (text.substr(i, 3) === "'Ò§" || text.substr(i, 3) === "'ÒÂ") {
+                        res += 'น';
+                        continue;
+                    }
+                    res += "'";
+                } else if (code >= 0xA1 && code <= 0xFB) {
+                    // Map Windows-874 byte to Thai Unicode: code - 0xA0 + 0x0E00
+                    res += String.fromCharCode(code - 0xA0 + 0x0E00);
+                } else if (code === 0x96) { // En dash sometimes in place of 0xA6 (ถ)
+                    res += 'ถ';
+                } else if (code === 0x93) { // Left quote
+                    res += '“';
+                } else if (code === 0x94) { // Right quote
+                    res += '”';
+                } else {
+                    res += text[i];
+                }
+            }
+            return res.trim();
+        }
+
+        // Match all accounts across PDF, SQLite, and Excel
+        function matchAllCustomerData() {
+            const pdfAccounts = Object.keys(accountGroups);
+            let targetAccounts = [];
+
+            // PRIORITY: Process ONLY accounts that are matched/present in the PDF document!
+            if (pdfAccounts.length > 0) {
+                targetAccounts = pdfAccounts;
+            } else if (rawExcelRecords.length > 0) {
+                const k = Object.keys(rawExcelRecords[0]).find(x => x.toLowerCase().includes('account') || x.includes('เลขที่บัญชี')) || Object.keys(rawExcelRecords[0])[0];
+                targetAccounts = rawExcelRecords.map(r => String(r[k]).trim()).filter(Boolean);
+            } else if (sqliteDb) {
+                try {
+                    const tables = sqliteDb.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+                    const tbl = (tables.length && tables[0].values.length) ? tables[0].values[0][0] : 'customers';
+                    const res = sqliteDb.exec(`SELECT AccountNo FROM ${tbl} LIMIT 200;`);
+                    if (res.length && res[0].values) {
+                        targetAccounts = res[0].values.map(v => v[0]);
+                    }
+                } catch (e) { }
+            }
+
+            if (targetAccounts.length === 0) return;
+
+            customerDataList = [];
+
+            targetAccounts.forEach(acct => {
+                const pages = accountGroups[acct] || [];
+                let rec = {
+                    AccountNo: acct,
+                    CustomerID: "-",
+                    AccountName: "-",
+                    MailingMethod: "Email",
+                    EmailAddress: "",
+                    CustomerMobile: "-",
+                    AppliedBranch: "-",
+                    PageCount: pages.length,
+                    Status: "pending",
+                    StatusText: "รอดำเนินการ",
+                    SentTime: null,
+                    Selected: true
+                };
+
+                // 1. Match SQLite Database
+                if (sqliteDb) {
+                    try {
+                        const cleanAcct = acct.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                        const tables = sqliteDb.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+                        const tbl = (tables.length && tables[0].values.length) ? tables[0].values[0][0] : 'customers';
+
+                        // Query all rows to do flexible smart matching on AccountNo
+                        const queryRes = sqliteDb.exec(`SELECT * FROM ${tbl};`);
+                        if (queryRes.length && queryRes[0].values) {
+                            const cols = queryRes[0].columns;
+                            const rows = queryRes[0].values;
+
+                            const acctColIdx = cols.findIndex(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') === 'accountno' || c.toLowerCase().includes('account') || c.includes('เลขที่บัญชี'));
+                            const cidColIdx = cols.findIndex(c => c.toLowerCase().includes('customerid') || c.toLowerCase().includes('custid') || c.toLowerCase() === 'id');
+                            const nameColIdx = cols.findIndex(c => c.toLowerCase().includes('name') || c.toLowerCase().includes('ชื่อ') || c.toLowerCase().includes('accountname'));
+                            const methodColIdx = cols.findIndex(c => c.toLowerCase().includes('method') || c.toLowerCase().includes('mailing'));
+                            const emailColIdx = cols.findIndex(c => c.toLowerCase().includes('email') || c.toLowerCase().includes('mail'));
+                            const mobileColIdx = cols.findIndex(c => c.toLowerCase().includes('mobile') || c.toLowerCase().includes('phone') || c.toLowerCase().includes('tel'));
+                            const branchColIdx = cols.findIndex(c => c.toLowerCase().includes('branch') || c.toLowerCase().includes('สาขา'));
+
+                            const matchedRow = rows.find(r => {
+                                const dbAcct = String(r[acctColIdx >= 0 ? acctColIdx : 0] || '').trim();
+                                const cleanDbAcct = dbAcct.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                                return cleanDbAcct && (cleanDbAcct === cleanAcct || cleanDbAcct.includes(cleanAcct) || cleanAcct.includes(cleanDbAcct));
+                            });
+
+                            if (matchedRow) {
+                                if (cidColIdx >= 0 && matchedRow[cidColIdx]) rec.CustomerID = String(matchedRow[cidColIdx]).trim();
+                                if (nameColIdx >= 0 && matchedRow[nameColIdx]) rec.AccountName = fixThaiEncoding(String(matchedRow[nameColIdx]));
+                                if (methodColIdx >= 0 && matchedRow[methodColIdx]) rec.MailingMethod = fixThaiEncoding(String(matchedRow[methodColIdx]));
+                                if (emailColIdx >= 0 && matchedRow[emailColIdx]) rec.EmailAddress = String(matchedRow[emailColIdx]).trim();
+                                if (mobileColIdx >= 0 && matchedRow[mobileColIdx]) rec.CustomerMobile = String(matchedRow[mobileColIdx]).trim();
+                                if (branchColIdx >= 0 && matchedRow[branchColIdx]) rec.AppliedBranch = fixThaiEncoding(String(matchedRow[branchColIdx]));
+                            }
+                        }
+                    } catch (e) {
+                        console.error("SQLite query match error:", e);
+                    }
+                }
+
+                // 2. Match Excel Records if not filled or supplemental
+                if (rawExcelRecords.length > 0) {
+                    const cleanTarget = acct.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                    const foundRow = rawExcelRecords.find(row => {
+                        const keys = Object.keys(row);
+                        const acctKey = keys.find(k => k.toLowerCase().includes('account') || k.includes('เลขที่บัญชี') || k.toLowerCase() === 'acct') || keys[0];
+                        const val = String(row[acctKey] || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                        return val && (val === cleanTarget || val.includes(cleanTarget) || cleanTarget.includes(val));
+                    });
+
+                    if (foundRow) {
+                        const keys = Object.keys(foundRow);
+                        const findKey = (terms) => keys.find(k => terms.some(t => k.toLowerCase().includes(t)));
+
+                        const emailKey = findKey(['email', 'e-mail', 'อีเมล']);
+                        const nameKey = findKey(['name', 'ชื่อ', 'accountname']);
+                        const cidKey = findKey(['customerid', 'custid', 'id', 'รหัส']);
+                        const branchKey = findKey(['branch', 'สาขา', 'appliedbranch']);
+                        const mobileKey = findKey(['mobile', 'tel', 'phone', 'เบอร์']);
+                        const methodKey = findKey(['method', 'mailing']);
+
+                        if (emailKey && foundRow[emailKey]) rec.EmailAddress = String(foundRow[emailKey]).trim();
+                        if (nameKey && foundRow[nameKey] && (rec.AccountName === '-' || !rec.AccountName)) rec.AccountName = fixThaiEncoding(String(foundRow[nameKey]));
+                        if (cidKey && foundRow[cidKey] && (rec.CustomerID === '-' || !rec.CustomerID)) rec.CustomerID = String(foundRow[cidKey]).trim();
+                        if (branchKey && foundRow[branchKey] && (rec.AppliedBranch === '-' || !rec.AppliedBranch)) rec.AppliedBranch = fixThaiEncoding(String(foundRow[branchKey]));
+                        if (mobileKey && foundRow[mobileKey] && (rec.CustomerMobile === '-' || !rec.CustomerMobile)) rec.CustomerMobile = String(foundRow[mobileKey]).trim();
+                        if (methodKey && foundRow[methodKey]) rec.MailingMethod = fixThaiEncoding(String(foundRow[methodKey]));
+                    }
+                }
+
+                // Set initial status
+                if (!rec.EmailAddress) {
+                    rec.Status = 'no_email';
+                    rec.StatusText = 'ไม่มีอีเมล';
+                }
+
+                customerDataList.push(rec);
+            });
+
+            dispatcherSection.classList.add('visible');
+            renderCustomerTable();
+            updateDispatcherStats();
+
+            const isPdfMatched = pdfAccounts.length > 0;
+            document.getElementById('matchSummaryText').innerHTML = `
+                <span style="color:var(--success);font-weight:600;">
+                    ✓ ${isPdfMatched ? `เฉพาะที่พบในเอกสาร PDF: ${customerDataList.length} บัญชี` : `พบทั้งหมด ${customerDataList.length} บัญชี`}
+                </span>
+            `;
+        }
+
+        // Render the 8-Column Customer Table
+        function renderCustomerTable() {
+            const tbody = document.getElementById('customerTableBody');
+            const search = (document.getElementById('tableSearchInput')?.value || '').toLowerCase().trim();
+            const filter = document.getElementById('tableStatusFilter')?.value || 'all';
+
+            tbody.innerHTML = '';
+            let shown = 0;
+
+            customerDataList.forEach((item, index) => {
+                if (filter !== 'all' && item.Status !== filter) return;
+                if (search) {
+                    const rowText = `${item.AccountNo} ${item.CustomerID} ${item.AccountName} ${item.EmailAddress} ${item.AppliedBranch}`.toLowerCase();
+                    if (!rowText.includes(search)) return;
+                }
+
+                shown++;
+                const tr = document.createElement('tr');
+
+                let badgeClass = 'status-pending';
+                if (item.Status === 'success') badgeClass = 'status-success';
+                else if (item.Status === 'failed') badgeClass = 'status-failed';
+                else if (item.Status === 'no_email') badgeClass = 'status-warning';
+
+                tr.innerHTML = `
+                    <td style="text-align: center;">
+                        <input type="checkbox" ${item.Selected ? 'checked' : ''} onchange="toggleCustomerSelect(${index}, this.checked)">
+                    </td>
+                    <td style="font-weight: 700; color: #a5b4fc;">${escapeHtml(item.AccountNo)}</td>
+                    <td>${escapeHtml(item.CustomerID)}</td>
+                    <td style="font-weight: 500;">${escapeHtml(item.AccountName)}</td>
+                    <td><span style="font-size: 0.78rem; color: #94a3b8;">${escapeHtml(item.MailingMethod)}</span></td>
+                    <td>
+                        <input type="text" value="${escapeHtml(item.EmailAddress)}" 
+                               style="padding: 4px 8px; font-size: 0.82rem; width: 190px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                               onchange="updateCustomerEmail(${index}, this.value)" placeholder="กรอกอีเมล...">
+                    </td>
+                    <td>${escapeHtml(item.CustomerMobile)}</td>
+                    <td>${escapeHtml(item.AppliedBranch)}</td>
+                    <td style="text-align: center;">
+                        <span class="status-badge ${badgeClass}">${escapeHtml(item.StatusText)}</span>
+                    </td>
+                    <td style="text-align: center;">
+                        <button class="btn btn-outline btn-sm" onclick="openReviewModal(${index})" style="padding: 4px 10px;">
+                            👁️ ตรวจสอบ & ส่ง
+                        </button>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+
+            if (shown === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                            ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function updateCustomerEmail(index, val) {
+            customerDataList[index].EmailAddress = val.trim();
+            if (customerDataList[index].EmailAddress && customerDataList[index].Status === 'no_email') {
+                customerDataList[index].Status = 'pending';
+                customerDataList[index].StatusText = 'รอดำเนินการ';
+            }
+            updateDispatcherStats();
+            renderCustomerTable();
+        }
+
+        function toggleCustomerSelect(index, checked) {
+            customerDataList[index].Selected = checked;
+        }
+
+        function toggleSelectAll(master) {
+            customerDataList.forEach(item => item.Selected = master.checked);
+            renderCustomerTable();
+        }
+
+        function updateDispatcherStats() {
+            const total = customerDataList.length;
+            const pending = customerDataList.filter(d => d.Status === 'pending').length;
+            const success = customerDataList.filter(d => d.Status === 'success').length;
+            const failed = customerDataList.filter(d => d.Status === 'failed').length;
+            const noEmail = customerDataList.filter(d => d.Status === 'no_email').length;
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statPending').textContent = pending;
+            document.getElementById('statSuccess').textContent = success;
+            document.getElementById('statFailed').textContent = failed;
+            document.getElementById('statNoEmail').textContent = noEmail;
+        }
+
+        // ==================== MANUAL REVIEW & EMAIL PREVIEW ====================
+
+        function compileEmailContent(templateStr, data) {
+            return templateStr
+                .replace(/{AccountNo}/g, data.AccountNo || '')
+                .replace(/{CustomerID}/g, data.CustomerID || '')
+                .replace(/{AccountName}/g, data.AccountName || '')
+                .replace(/{AppliedBranch}/g, data.AppliedBranch || '')
+                .replace(/{CustomerMobile}/g, data.CustomerMobile || '')
+                .replace(/{MailingMethod}/g, data.MailingMethod || '');
+        }
+
+        function buildDefaultEmailBody(item) {
+            const dateStr = extractDateFromFileName(originalFileName);
+            const fname = `${item.AccountNo}_${dateStr}.pdf`;
+            const pages = accountGroups[item.AccountNo] || [];
+
+            let body = `เรียน คุณ ${item.AccountName},\n\n`;
+            body += `เรื่อง: แจ้งยืนยันรายการและนำส่งเอกสาร Confirmation\n\n`;
+            body += `รายละเอียดข้อมูลบัญชี:\n`;
+            body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            body += `• เลขที่บัญชี: ${item.AccountNo}\n`;
+            body += `• รหัสลูกค้า: ${item.CustomerID}\n`;
+            body += `• สาขา: ${item.AppliedBranch}\n`;
+            body += `• ชื่อไฟล์แนบ: ${fname}\n`;
+            if (pages.length) body += `• จำนวนหน้าในเอกสาร: ${pages.length} หน้า\n`;
+            body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            body += `กรุณาตรวจสอบเอกสารแนบ (${fname})\n`;
+            body += `(รหัสผ่านเปิดเอกสารคือเลขที่บัญชีของท่าน: ${item.AccountNo})\n\n`;
+            body += `หากมีข้อสงสัยประการใด กรุณาติดต่อฝ่ายบริการลูกค้า โทร. 02-055-5107\n\n`;
+            body += `ขอแสดงความนับถือ,\n`;
+            body += `บริษัทหลักทรัพย์ แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)\n`;
+
+            return body;
+        }
+
+        function openReviewModal(index) {
+            currentReviewIndex = index;
+            const item = customerDataList[index];
+
+            document.getElementById('modalAccountNo').textContent = item.AccountNo;
+            document.getElementById('modalAccountName').textContent = item.AccountName;
+            document.getElementById('modalCustomerID').textContent = item.CustomerID;
+            document.getElementById('modalBranch').textContent = item.AppliedBranch;
+            document.getElementById('modalEmail').value = item.EmailAddress;
+
+            const tplSubject = document.getElementById('mailSubjectTemplate').value;
+            const subject = compileEmailContent(tplSubject, item);
+            const body = buildDefaultEmailBody(item);
+
+            document.getElementById('modalSubject').value = subject;
+            document.getElementById('modalBodyPreview').textContent = body;
+
+            document.getElementById('reviewModal').style.display = 'flex';
+        }
+
+        function closeReviewModal() {
+            document.getElementById('reviewModal').style.display = 'none';
+        }
+
+        function navigateModal(direction) {
+            let nextIndex = currentReviewIndex + direction;
+            if (nextIndex >= 0 && nextIndex < customerDataList.length) {
+                openReviewModal(nextIndex);
+            }
+        }
+
+        function downloadModalPdf() {
+            if (currentReviewIndex < 0) return;
+            const item = customerDataList[currentReviewIndex];
+            downloadGroup(item.AccountNo);
+        }
+
+        function confirmSendSingle() {
+            if (currentReviewIndex < 0) return;
+            const item = customerDataList[currentReviewIndex];
+            const email = document.getElementById('modalEmail').value.trim();
+            const subject = document.getElementById('modalSubject').value;
+            const body = document.getElementById('modalBodyPreview').textContent;
+
+            if (!email) {
+                showToast('error', '❌ กรุณาระบุอีเมลผู้รับ');
+                return;
+            }
+
+            item.EmailAddress = email;
+            const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.open(mailtoUrl, '_blank');
+
+            item.Status = 'success';
+            item.StatusText = 'ส่งสำเร็จ';
+            item.SentTime = new Date().toLocaleTimeString('th-TH');
+
+            updateDispatcherStats();
+            renderCustomerTable();
+            showToast('success', `📧 เปิด Outlook สำหรับ ${item.AccountNo} เรียบร้อย`);
+            closeReviewModal();
+        }
+
+        // ==================== AUTOMATED SENDING ====================
+
+        async function startAutomatedSending() {
+            const targets = customerDataList.filter(d => d.Selected && d.Status !== 'success');
+            if (targets.length === 0) {
+                showToast('warning', '⚠️ ไม่มีรายการที่เลือกหรือยังไม่ได้ส่ง');
+                return;
+            }
+
+            if (!confirm(`ยืนยันการเริ่มส่งอีเมลอัตโนมัติจำนวน ${targets.length} รายการ?`)) return;
+
+            isAutomating = true;
+            automationCancelled = false;
+
+            const box = document.getElementById('automationBox');
+            const pBar = document.getElementById('autoProgressBar');
+            const sText = document.getElementById('autoStatusText');
+            const pctText = document.getElementById('autoPercentText');
+            const cntText = document.getElementById('autoCounterText');
+            const logEl = document.getElementById('autoLogConsole');
+
+            box.style.display = 'block';
+            logEl.innerHTML = '<div class="log-entry info">🚀 เริ่มต้นกระบวนการส่งอัตโนมัติ...</div>';
+
+            const tplSubject = document.getElementById('mailSubjectTemplate').value;
+            let successCount = 0;
+
+            for (let i = 0; i < targets.length; i++) {
+                if (automationCancelled) {
+                    logEl.innerHTML += `<div class="log-entry error">⛔ ผู้ใช้สั่งหยุดการส่ง</div>`;
+                    break;
+                }
+
+                const item = targets[i];
+
+                if (!item.EmailAddress) {
+                    item.Status = 'no_email';
+                    item.StatusText = 'ไม่มีอีเมล';
+                    logEl.innerHTML += `<div class="log-entry error">⚠️ [${item.AccountNo}] ข้าม: ไม่พบบัญชีอีเมล</div>`;
+                } else {
+                    const subject = compileEmailContent(tplSubject, item);
+                    const body = buildDefaultEmailBody(item);
+
+                    const mailtoUrl = `mailto:${encodeURIComponent(item.EmailAddress)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                    window.open(mailtoUrl, '_blank');
+
+                    item.Status = 'success';
+                    item.StatusText = 'ส่งสำเร็จ';
+                    item.SentTime = new Date().toLocaleTimeString('th-TH');
+                    successCount++;
+
+                    logEl.innerHTML += `<div class="log-entry success">✓ [${item.AccountNo}] ส่งไปยัง ${item.EmailAddress} (${item.AccountName})</div>`;
+                }
+
+                const pct = Math.round(((i + 1) / targets.length) * 100);
+                pBar.style.width = `${pct}%`;
+                pctText.textContent = `${pct}%`;
+                cntText.textContent = `ดำเนินการ: ${i + 1} / ${targets.length} (สำเร็จ ${successCount})`;
+                logEl.scrollTop = logEl.scrollHeight;
+
+                renderCustomerTable();
+                updateDispatcherStats();
+
+                // 2-second delay between emails
+                await new Promise(r => setTimeout(r, 2000));
+            }
+
+            sText.textContent = automationCancelled ? "⛔ หยุดกระบวนการแล้ว" : "🎉 ดำเนินการส่งเสร็จสิ้นสมบูรณ์!";
+            isAutomating = false;
+        }
+
+        function stopAutomatedSending() {
+            automationCancelled = true;
+        }
+
+        // Export Result Table back to Excel (.xlsx)
+        function exportResultExcel() {
+            if (customerDataList.length === 0) {
+                showToast('warning', '⚠️ ยังไม่มีข้อมูลสำหรับ Export');
+                return;
+            }
+
+            const exportData = customerDataList.map(item => ({
+                "AccountNo": item.AccountNo,
+                "CustomerID": item.CustomerID,
+                "AccountName": item.AccountName,
+                "MailingMethod": item.MailingMethod,
+                "EmailAddress": item.EmailAddress,
+                "CustomerMobile": item.CustomerMobile,
+                "AppliedBranch": item.AppliedBranch,
+                "สถานะการส่ง": item.StatusText,
+                "เวลาที่ส่ง": item.SentTime || "-"
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Mail_Dispatch_Status");
+
+            const today = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `Mail_Dispatch_Status_${today}.xlsx`);
+            showToast('success', '📥 ดาวน์โหลดรายงาน Excel สำเร็จ');
+        }
+
+        // ==================== PDF DOWNLOAD & ENCRYPTION ====================
+
+        async function downloadGroup(acctKey) {
+            try {
+                const pages = accountGroups[acctKey];
+                if (!pages || pages.length === 0) {
+                    showToast('warning', `⚠️ ไม่มีหน้า PDF สำหรับบัญชี ${acctKey}`);
+                    return;
+                }
+
+                const { PDFDocument } = PDFLib;
+                const srcDoc = await PDFDocument.load(pdfBytes);
+                const newDoc = await PDFDocument.create();
+
+                const copiedPages = await newDoc.copyPages(srcDoc, pages);
+                copiedPages.forEach(page => newDoc.addPage(page));
+
+                let newPdfBytes = await newDoc.save();
+
+                const encryptCheckbox = document.getElementById('encryptPdfCheckbox');
+                if (encryptCheckbox && encryptCheckbox.checked && window.encryptPDF) {
+                    const pattern = document.getElementById('encryptPasswordPattern').value || '{account}';
+                    const password = pattern.replace(/{account}/g, acctKey);
+                    newPdfBytes = await window.encryptPDF(newPdfBytes, password, { algorithm: 'RC4' });
+                }
+
+                const dateStr = extractDateFromFileName(originalFileName);
+                const filename = `${acctKey}_${dateStr}.pdf`;
+
+                downloadBlob(new Blob([newPdfBytes], { type: 'application/pdf' }), filename);
+                showToast('success', `✅ ดาวน์โหลด ${filename} สำเร็จ`);
+            } catch (error) {
+                console.error('Error downloading group:', error);
+                showToast('error', `❌ เกิดข้อผิดพลาด: ${error.message}`);
+            }
+        }
+
+        async function downloadAllAsZip() {
+            buildGroups();
+
+            const btn = document.getElementById('btnDownloadZip');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> กำลังสร้างไฟล์ ZIP...';
+
+            try {
+                const { PDFDocument } = PDFLib;
+                const srcDoc = await PDFDocument.load(pdfBytes);
+                const zip = new JSZip();
+                const dateStr = extractDateFromFileName(originalFileName);
+                const accounts = Object.keys(accountGroups);
+
+                for (const acct of accounts) {
+                    const pages = accountGroups[acct];
+                    const newDoc = await PDFDocument.create();
+                    const copiedPages = await newDoc.copyPages(srcDoc, pages);
+                    copiedPages.forEach(page => newDoc.addPage(page));
+                    let newPdfBytes = await newDoc.save();
+
+                    const encryptCheckbox = document.getElementById('encryptPdfCheckbox');
+                    if (encryptCheckbox && encryptCheckbox.checked && window.encryptPDF) {
+                        const pattern = document.getElementById('encryptPasswordPattern').value || '{account}';
+                        const password = pattern.replace(/{account}/g, acct);
+                        newPdfBytes = await window.encryptPDF(newPdfBytes, password, { algorithm: 'RC4' });
+                    }
+
+                    const filename = `${acct}_${dateStr}.pdf`;
+                    zip.file(filename, newPdfBytes);
+                }
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                downloadBlob(zipBlob, `${originalFileName}_split.zip`);
+                showToast('success', `✅ ดาวน์โหลด ZIP สำเร็จ (${accounts.length} ไฟล์)`);
+            } catch (error) {
+                console.error('Error creating ZIP:', error);
+                showToast('error', `❌ เกิดข้อผิดพลาด: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ดาวน์โหลด PDF ทั้งหมด (ZIP)
+                `;
+            }
+        }
+
+        async function downloadAllSeparately() {
+            buildGroups();
+            const accounts = Object.keys(accountGroups);
+            for (const acct of accounts) {
+                await downloadGroup(acct);
+                await new Promise(r => setTimeout(r, 400));
+            }
+            showToast('success', `✅ ดาวน์โหลดแยกไฟล์ครบ ${accounts.length} บัญชีแล้ว`);
+        }
+
+        // Helpers
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
+
+        function updateProgress(pct, status) {
+            progressFill.style.width = pct + '%';
+            progressPercent.textContent = pct + '%';
+            progressStatus.textContent = status;
+        }
+
+        function showStatus(type, message) {
+            statusMessage.className = `status-message visible ${type}`;
+            statusMessage.innerHTML = message;
+        }
+
+        function showToast(type, message) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function resetApp() {
+            pdfBytes = null;
+            pdfDoc = null;
+            pageTexts = [];
+            pageCount = 0;
+            detectedAccounts = [];
+            accountGroups = {};
+            customerDataList = [];
+            originalFileName = '';
+            fileInput.value = '';
+            fileInfo.classList.remove('visible');
+            progressSection.style.display = 'none';
+            statusMessage.className = 'status-message';
+            codeInputSection.classList.remove('visible');
+            groupSummarySection.classList.remove('visible');
+            downloadSection.style.display = 'none';
+            dispatcherSection.classList.remove('visible');
+            pagesGrid.innerHTML = '';
+            groupList.innerHTML = '';
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LHSEC - CashTransaction Exporter (CQ Format)</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+  <!-- External Libraries: SheetJS (xlsx) & JSZip (Offline Local Copies) -->
+  <script src="js/xlsx.full.min.js"></script>
+  <script src="js/jszip.min.js"></script>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header class="header-container">
+    <div class="logo-area">
+      <div class="logo-badge">LHSEC</div>
+      <div class="title-area">
+        <h1>Global Trading - CashTransaction Exporter</h1>
+        <p>แปลงไฟล์ข้อมูลรายงานประจำวัน (2026_08_reports) สู่รูปแบบ CashTransaction_XXXXXXX.xlsx สำหรับระบบ CQ</p>
+      </div>
+    </div>
+    <div class="status-badge">
+      <div class="status-dot"></div>
+      <span>CQ Format Ready (28 Columns)</span>
+    </div>
+  </header>
+
+  <!-- Main Work Area -->
+  <div class="main-layout">
+    
+    <!-- Left Configuration & Upload Sidebar -->
+    <aside class="sidebar">
+      <!-- File Upload Card -->
+      <div class="card">
+        <div class="card-title">
+          <i>📁</i> นำเข้าไฟล์รายงาน (Upload)
+        </div>
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">📥</div>
+          <p>ลากไฟล์ <strong>.CSV</strong> หรือ <strong>.ZIP</strong> วางที่นี่</p>
+          <p>หรือคลิกเพื่อ <span class="browse-btn">เลือกไฟล์จากเครื่อง</span></p>
+          <input type="file" id="fileInput" accept=".csv, .zip, .xlsx, .xls" style="display:none;" multiple>
+        </div>
+      </div>
+
+      <!-- Settings / Default Transaction Properties -->
+      <div class="card">
+        <div class="card-title">
+          <i>⚙️</i> ตั้งค่าการแปลงข้อมูล (Settings)
+        </div>
+
+        <div class="form-group">
+          <label for="defaultTxnType">Transaction Type เริ่มต้น</label>
+          <select id="defaultTxnType" class="form-control">
+            <option value="AW" selected>AW - Adjust Dividend Tax (หักภาษีเงินปันผล)</option>
+            <option value="AD">AD - Adjust Dividend (เงินปันผลรับ)</option>
+            <option value="CD">CD - Cash Deposit (ฝากเงิน)</option>
+            <option value="CW">CW - Cash Withdrawal (ถอนเงิน)</option>
+            <option value="CCA">CCA - Convert Currency Add (แปลงสกุลเงิน)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="defaultB2BAcc">B2B Account No เริ่มต้น (Default)</label>
+          <input type="text" id="defaultB2BAcc" class="form-control" value="ASI374219405" placeholder="เช่น ASI374219405">
+        </div>
+
+        <div class="form-group">
+          <label for="defaultRemark">Remark เริ่มต้น</label>
+          <input type="text" id="defaultRemark" class="form-control" value="NoN TAX" placeholder="เช่น NoN TAX, WHT TAX">
+        </div>
+
+        <div class="form-group">
+          <label for="defaultTransDate">วันที่มีผล (Override Date - YYYYMMDD)</label>
+          <input type="text" id="defaultTransDate" class="form-control" placeholder="ปล่อยว่างเพื่อใช้วันที่ตามไฟล์">
+        </div>
+
+        <button id="manageMasterBtn" class="btn btn-secondary btn-block">
+          👥 จัดการ Master ลูกค้า (Customer Mapping)
+        </button>
+      </div>
+
+      <!-- Quick Action Summary -->
+      <div class="card" style="background: rgba(15, 23, 42, 0.6);">
+        <div style="font-size:13px; color: var(--text-muted); line-height: 1.6;">
+          💡 <strong>คำแนะนำ:</strong><br>
+          • รองรับไฟล์ <code>2026_08_28_cash_transaction_data.csv</code> และไฟล์ ZIP รายงาน<br>
+          • ระบบจะจับคู่เลขบัญชี 800001, 012147 และชื่อลูกค้าให้โดยอัตโนมัติ<br>
+          • สามารถแก้ไขค่าในตารางได้โดยตรงก่อนกดส่งออก
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Data Table & Export Area -->
+    <main class="content-area">
+      
+      <!-- Toolbar & Export Actions -->
+      <div class="toolbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <h2 style="font-size:18px; font-weight:600;">รายการธุรกรรม (Transaction Data)</h2>
+          <span class="badge" id="rowCountBadge">0 รายการ</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="addRowBtn" class="btn btn-secondary btn-sm">+ เพิ่มแถวใหม่</button>
+          <button id="clearBtn" class="btn btn-secondary btn-sm">ล้างตาราง</button>
+          <button id="exportXlsxBtn" class="btn btn-primary" disabled>
+            📊 Export .XLSX
+          </button>
+          <button id="exportXlsBtn" class="btn btn-success" disabled>
+            📋 Export .XLS
+          </button>
+        </div>
+      </div>
+
+      <!-- Table Container -->
+      <div class="table-card">
+        <div class="table-header-bar">
+          <span style="font-size:13px; color:var(--text-muted);">
+            ตารางแสดงผล 28 คอลัมน์ตามรูปแบบ CQ (แก้ไขข้อมูลในช่องได้โดยตรง)
+          </span>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="cq-table">
+            <thead>
+              <tr>
+                <th class="col-no">No</th>
+                <th class="col-acc">Account No</th>
+                <th class="col-acc">Sub Account No</th>
+                <th class="col-code">B2B Code</th>
+                <th class="col-acc">B2B Account No</th>
+                <th class="col-acc">B2B Sub Account No</th>
+                <th class="col-name">First Name</th>
+                <th class="col-name">Last Name</th>
+                <th class="col-date">Trans Date</th>
+                <th class="col-date">Effective Date</th>
+                <th class="col-date">Value Date</th>
+                <th class="col-type">Transaction Type</th>
+                <th class="col-desc">Description</th>
+                <th class="col-code">Company Code</th>
+                <th class="col-code">Format</th>
+                <th class="col-ccy">CCY</th>
+                <th class="col-acc">FCD Account</th>
+                <th class="col-amount">Amount</th>
+                <th class="col-amount">Bank Charge</th>
+                <th class="col-ccy">CCY Purchase</th>
+                <th class="col-acc">FCD Account Purchase</th>
+                <th class="col-amount">Amount Purchase</th>
+                <th class="col-amount">Bank Charge Purchase</th>
+                <th class="col-rate">FX Rate</th>
+                <th class="col-rate">FX CCY</th>
+                <th class="col-ref">Ref No</th>
+                <th class="col-status">Status</th>
+                <th class="col-remark">Remark</th>
+                <th class="col-action" style="text-align:center;">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="cqTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+
+          <!-- Empty State -->
+          <div id="emptyState" class="empty-state">
+            <div class="empty-icon">📊</div>
+            <h3>ยังไม่มีข้อมูลรายการ</h3>
+            <p>กรุณาลากไฟล์รายงาน .CSV หรือ .ZIP มาวางในกรอบด้านซ้ายเพื่อเริ่มต้นประมวลผล</p>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- Customer Master Modal -->
+  <div id="masterModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 style="font-size:16px;">จัดการข้อมูลจับคู่บัญชีลูกค้า (Customer Master Mapping)</h3>
+        <button id="closeModalBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">
+          กำหนดค่าจับคู่เลขที่บัญชี (Account No) กับ B2B Account และชื่อ-นามสกุลลูกค้า เพื่อให้ระบบเติมข้อมูลให้อัตโนมัติ:
+        </p>
+        <table class="cq-table" style="width:100%;">
+          <thead>
+            <tr>
+              <th>Account No</th>
+              <th>B2B Account No</th>
+              <th>First Name</th>
+              <th>Last Name</th>
+              <th style="text-align:center;">ลบ</th>
+            </tr>
+          </thead>
+          <tbody id="masterTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+        <div style="margin-top:12px;">
+          <button id="addMasterRowBtn" class="btn btn-secondary btn-sm">+ เพิ่มลูกค้ารายใหม่</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="resetMasterBtn" class="btn btn-secondary">คืนค่าเริ่มต้น</button>
+        <button id="saveMasterBtn" class="btn btn-primary">บันทึกข้อมูล (Save)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Script -->
+  <script src="js/app.js?v=2"></script>
+</body>
+</html>

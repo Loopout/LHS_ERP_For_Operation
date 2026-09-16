@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Mail Sender Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Visual Section -->
+        <div class="sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-paper-plane"></i>
+                <h2>AutoMail Pro</h2>
+            </div>
+            <div class="illustration">
+                <div class="glass-card">
+                    <i class="fa-solid fa-file-excel"></i>
+                    <p>Load your list</p>
+                </div>
+                <div class="arrow"><i class="fa-solid fa-arrow-down"></i></div>
+                <div class="glass-card">
+                    <i class="fa-solid fa-envelope-open-text"></i>
+                    <p>Compose</p>
+                </div>
+                <div class="arrow"><i class="fa-solid fa-arrow-down"></i></div>
+                <div class="glass-card">
+                    <i class="fa-solid fa-rocket"></i>
+                    <p>Launch</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Form Section -->
+        <div class="main-content">
+            <header style="position: relative;">
+                <h1>Send Automated Emails</h1>
+                <p>Broadcast emails securely via SMTP with Excel lists and attachments.</p>
+                <a href="split_pdf.html" class="btn-secondary" style="position: absolute; right: 0; top: 0; padding: 8px 16px; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600;">
+                    <i class="fa-solid fa-file-pdf"></i> PDF Splitter & E-Document
+                </a>
+            </header>
+
+            <form id="emailForm">
+                
+                <!-- Section 1: SMTP Settings -->
+                <div class="form-section">
+                    <h3><i class="fa-solid fa-server"></i> SMTP Settings</h3>
+                    <div class="input-grid">
+                        <div class="input-group">
+                            <label>SMTP Host</label>
+                            <input type="text" id="smtpHost" name="smtpHost" placeholder="smtp.gmail.com" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Port</label>
+                            <input type="number" id="smtpPort" name="smtpPort" placeholder="465" value="465" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Secure (SSL/TLS)</label>
+                            <select id="smtpSecure" name="smtpSecure">
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Username (Email)</label>
+                            <input type="email" id="smtpUser" name="smtpUser" placeholder="you@domain.com" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Password / App Password</label>
+                            <input type="password" id="smtpPass" name="smtpPass" placeholder="••••••••" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: File Uploads -->
+                <div class="form-section">
+                    <h3><i class="fa-solid fa-folder-open"></i> Attachments & Data</h3>
+                    <div class="upload-grid">
+                        <!-- Excel File -->
+                        <div class="upload-zone" id="excelDropZone">
+                            <input type="file" id="excelFile" name="excelFile" accept=".xlsx, .xls, .csv" required hidden>
+                            <div class="upload-content">
+                                <i class="fa-solid fa-file-excel icon-excel"></i>
+                                <h4>Excel Account List</h4>
+                                <p>Drag & Drop or <span>Browse</span></p>
+                                <span class="file-name" id="excelFileName">No file chosen</span>
+                            </div>
+                        </div>
+
+                        <!-- Attachments -->
+                        <div class="upload-zone" id="attachmentDropZone">
+                            <input type="file" id="attachmentFiles" name="attachmentFiles" multiple hidden>
+                            <div class="upload-content">
+                                <i class="fa-solid fa-paperclip icon-attach"></i>
+                                <h4>Email Attachments</h4>
+                                <p>Drag & Drop or <span>Browse</span></p>
+                                <span class="file-name" id="attachmentFileNames">Optional (Max 5)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Email Content -->
+                <div class="form-section">
+                    <h3><i class="fa-solid fa-pen-nib"></i> Compose Email</h3>
+                    <div class="input-group full-width">
+                        <label>Email Subject</label>
+                        <input type="text" id="subject" name="subject" placeholder="Enter the subject here..." required>
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Email Body</label>
+                        <div class="tips">Tip: Use <code>[ColumnName]</code> to insert dynamic data from your Excel file (e.g. <code>Dear [Name]</code>).</div>
+                        <textarea id="body" name="body" rows="6" placeholder="Type your message here..." required></textarea>
+                    </div>
+                </div>
+
+                <div class="action-footer">
+                    <button type="submit" id="sendBtn" class="btn-primary">
+                        <i class="fa-solid fa-paper-plane"></i> Send Emails
+                    </button>
+                </div>
+                
+                <!-- Status/Progress Output -->
+                <div id="statusMessage" class="status-message hidden">
+                    <div class="spinner hidden" id="spinner"></div>
+                    <span id="statusText"></span>
+                </div>
+
+            </form>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
